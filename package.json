@@ -1,0 +1,13 @@
+{
+  "name": "led-wall-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mobile PWA zur Planung von LED-Walls: Maße, Auflösung, Signalwege und Stromverkabelung.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/*.test.mjs",
+    "icons": "node tools/make-icons.mjs"
+  },
+  "license": "MIT"
+}

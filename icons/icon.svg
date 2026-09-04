@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="LED Wall Planner">
+  <rect width="192" height="192" rx="42" fill="#0d1117"/>
+  <g stroke-width="4">
+    <rect x="31" y="31" width="59" height="59" rx="4" fill="#38bdf8" fill-opacity=".28" stroke="#38bdf8"/>
+    <rect x="102" y="31" width="59" height="59" rx="4" fill="#f97316" fill-opacity=".28" stroke="#f97316"/>
+    <rect x="31" y="102" width="59" height="59" rx="4" fill="#a3e635" fill-opacity=".28" stroke="#a3e635"/>
+    <rect x="102" y="102" width="59" height="59" rx="4" fill="#e879f9" fill-opacity=".28" stroke="#e879f9"/>
+  </g>
+</svg>
