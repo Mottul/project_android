@@ -1,8 +1,9 @@
 # Veröffentlicht die PWA auf GitHub Pages.
 #
-# Beim ersten Lauf aktiviert `configure-pages` die Pages-Funktion selbst
-# (enablement). Schlägt das fehl, einmalig unter
-# Settings → Pages → Source „GitHub Actions“ wählen.
+# Einmalige Voraussetzung: Settings → Pages → Source „GitHub Actions“.
+# Das Anlegen der Pages-Site kann der GITHUB_TOKEN des Workflows nicht selbst
+# übernehmen (Resource not accessible by integration); `enablement: true`
+# unten greift nur, falls das Repository es doch erlaubt.
 name: Deploy PWA to GitHub Pages
 
 on:

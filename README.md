@@ -60,9 +60,11 @@ Pages“ → Run workflow.
 
 Live: **https://mottul.github.io/project_android/**
 
-Der erste Lauf aktiviert Pages selbst. Falls die Organisation das unterbindet,
-einmalig unter Settings → Pages → Source „GitHub Actions“ wählen und den
-Workflow erneut starten.
+Einmalig vorab nötig: unter **Settings → Pages → Source** „GitHub Actions“
+wählen. Den `GITHUB_TOKEN` des Workflows lässt GitHub die Pages-Site nicht
+selbst anlegen — ohne diesen Schritt bricht der Job „Deployen“ mit
+`Resource not accessible by integration` ab. Danach den Workflow erneut
+starten (Actions → Run workflow).
 
 Alle Pfade sind relativ, das Unterverzeichnis `/project_android/` funktioniert
 also ohne Anpassung — ebenso jeder andere Static-Host.
