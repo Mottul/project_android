@@ -51,9 +51,21 @@ Auf dem Handy im Browser öffnen und über „Zum Startbildschirm hinzufügen“
 installieren. Für den Service Worker (Offline-Betrieb, Installation) wird
 HTTPS oder `localhost` benötigt.
 
-Deployment: Repository-Inhalt auf einen beliebigen Static-Host legen, z. B.
-GitHub Pages (Settings → Pages → Branch wählen). Alle Pfade sind relativ,
-ein Unterverzeichnis funktioniert also ebenfalls.
+## Deployment
+
+Der Workflow `.github/workflows/pages.yml` testet den Rechenkern und
+veröffentlicht das Repository anschließend auf GitHub Pages — bei jedem Push
+auf den Default-Branch oder manuell über Actions → „Deploy PWA to GitHub
+Pages“ → Run workflow.
+
+Live: **https://mottul.github.io/project_android/**
+
+Der erste Lauf aktiviert Pages selbst. Falls die Organisation das unterbindet,
+einmalig unter Settings → Pages → Source „GitHub Actions“ wählen und den
+Workflow erneut starten.
+
+Alle Pfade sind relativ, das Unterverzeichnis `/project_android/` funktioniert
+also ohne Anpassung — ebenso jeder andere Static-Host.
 
 ## Tests
 

@@ -1,0 +1,56 @@
+# Veröffentlicht die PWA auf GitHub Pages.
+#
+# Beim ersten Lauf aktiviert `configure-pages` die Pages-Funktion selbst
+# (enablement). Schlägt das fehl, einmalig unter
+# Settings → Pages → Source „GitHub Actions“ wählen.
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - claude/led-wall-planning-pwa-t1mr04
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Laufende Deployments nicht abbrechen, aber nur eines gleichzeitig.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Rechenkern testen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Tests
+        run: npm test
+
+  deploy:
+    name: Deployen
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pages konfigurieren
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Seite hochladen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - name: Deployen
+        id: deployment
+        uses: actions/deploy-pages@v4
