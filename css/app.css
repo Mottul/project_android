@@ -81,6 +81,54 @@ main { padding: 12px 12px 28px; display: grid; gap: 12px; max-width: 780px; marg
   gap: 12px;
 }
 
+/* Aufklappbare Bereiche: Kopfzeile mit Kurzinfo, Inhalt darunter. */
+details.card { padding: 0; gap: 0; display: block; }
+details.card > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  min-height: 50px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-left: 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .15s ease;
+}
+details.card[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+details.card > summary h2 { flex: none; }
+.sec-info {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: .78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+details.card > .sec-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  details.card > summary::after { transition: none; }
+}
+
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 340px) { .grid-2 { grid-template-columns: 1fr; } }
 
@@ -129,10 +177,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .chip {
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0 14px;
+  padding: 0 12px;
   min-height: 40px;
   background: var(--bg-input);
 }
+/* Drei Schalter passen nebeneinander in eine Zeile. */
+.chip-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.chip-row .chip { gap: 6px; padding: 0 6px; justify-content: center; font-size: .78rem; }
+.chip-row .chip input { width: 17px; height: 17px; }
+.chip-row .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip:has(input:checked) { border-color: var(--accent); color: var(--accent); }
 
 /* Stepper für Spalten/Zeilen */
@@ -223,6 +276,32 @@ details.sub summary { cursor: pointer; font-size: .88rem; color: var(--accent); 
 .note.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); color: var(--warn); }
 .note.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); color: var(--ok); }
 .note.bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
+
+/* ---------- Bildraten-Tabelle ---------- */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table.rates { width: 100%; border-collapse: collapse; font-size: .84rem; }
+table.rates th, table.rates td {
+  padding: 8px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.rates th { color: var(--muted); font-weight: 500; font-size: .76rem; text-align: right; }
+table.rates th:first-child, table.rates td:first-child { text-align: left; }
+table.rates tr:last-child td { border-bottom: 0; }
+table.rates tbody tr { cursor: pointer; }
+table.rates tr.current td { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-weight: 600; }
+table.rates tfoot td { color: var(--muted); font-size: .74rem; text-align: left; border-bottom: 0; }
+
+/* ---------- 16:9-Einpassung ---------- */
+.fit-wrap {
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+.fit-wrap svg { display: block; width: 100%; height: auto; max-height: 34vh; }
 
 /* ---------- Wandgrafik ---------- */
 .wall-wrap {
@@ -337,7 +416,10 @@ details.sub summary { cursor: pointer; font-size: .88rem; color: var(--accent); 
 /* ---------- Druck ---------- */
 @media print {
   :root { --bg: #fff; --bg-card: #fff; --bg-input: #fff; --text: #000; --muted: #444; --line: #bbb; color-scheme: light; }
-  .topbar, .tabbar, .btn-row, .toast, .seg, .chip { display: none !important; }
+  .topbar, .tabbar, .btn-row, .toast, .seg, .chip, .chip-row { display: none !important; }
+  details.card > summary::after { display: none; }
+  details.card > summary { padding-bottom: 4px; }
+  .sec-info { display: none; }
   body { padding: 0; }
   .view[hidden] { display: none; }
   .card { break-inside: avoid; border-color: #bbb; }

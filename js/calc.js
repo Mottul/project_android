@@ -3,6 +3,8 @@
  * Reine Funktionen ohne DOM-Zugriff, damit sie testbar bleiben.
  */
 
+import { pxPortAt } from './data.js';
+
 /** Kette = eine Daten- oder Stromleitung mit den daran haengenden Panels. */
 /** @typedef {{index:number, cells:{c:number,r:number}[], px:number, watt:number}} Chain */
 
@@ -73,7 +75,7 @@ const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 /** Leitet aus Panel + Raster + Signal- und Stromvorgaben alle Kennzahlen ab. */
 export function computeAll(state) {
-  const p = state.panel;
+  const p = state.module;
   const cols = Math.max(1, state.grid.cols | 0);
   const rows = Math.max(1, state.grid.rows | 0);
   const count = cols * rows;
@@ -122,7 +124,8 @@ export function computeAll(state) {
 
   // --- Signal ------------------------------------------------------------
   const pxPanel = p.px * p.py;
-  const pxPort = Math.max(1, state.signal.pxPort | 0);
+  const hz = state.signal.hz || 60;
+  const pxPort = Math.max(1, pxPortAt(state.signal.pxPort60 | 0, hz));
   const budgetPx = Math.floor(pxPort / pxPanel);
   const chainLimit = Math.max(1, state.signal.maxChain | 0);
   const perPort = Math.max(1, Math.min(budgetPx, chainLimit));
@@ -170,10 +173,44 @@ export function computeAll(state) {
     circuitW: Math.round(circuitW), perCircuit, autoPerCircuit, basisW,
     circuits, phases, circuitsPerPhase, maxPerCircuit: maxCells(powerChains),
     ampsMax: round(ampsMax, 1), ampsAvg: round(ampsAvg, 1),
-    powerChains,
+    powerChains, feed: standardFeed(round(ampsMax, 1), phases),
     pxPanel, perPort, portLimitedBy, portsUsed, portsNeeded, portsAvail,
     processors, portLoad: round(portLoad * 100, 0), dataChains, maxPerPort: maxCells(dataChains),
+    hz, pxPort,
+    fitHD: fitInto(resW, resH, 1920, 1080),
+    fitUHD: fitInto(resW, resH, 3840, 2160),
     distMin, distComfort, distRetina,
+  };
+}
+
+/** Empfohlene Einspeisung: kleinster passender Standard-Anschluss. */
+export function standardFeed(ampsPerPhase, phases) {
+  const sizes = [16, 32, 63, 125];
+  const need = ampsPerPhase / 0.8;
+  const size = sizes.find((s) => s >= need);
+  const nf = (v) => Number(v).toLocaleString('de-DE', { maximumFractionDigits: 0 });
+  if (!size) return `${nf(Math.ceil(need))} A je Phase (Sonderverteilung)`;
+  return phases === 3 ? `CEE ${size} A, 5-polig` : `${size} A einphasig`;
+}
+
+/**
+ * Passt die Wand mittig in ein Quellbild ein (Seitenverhaeltnis erhalten)
+ * und beziffert die schwarzen Raender.
+ */
+export function fitInto(resW, resH, canvasW, canvasH) {
+  const scale = Math.min(canvasW / resW, canvasH / resH);
+  const w = resW * scale;
+  const h = resH * scale;
+  const barX = Math.round((canvasW - w) / 2);
+  const barY = Math.round((canvasH - h) / 2);
+  const mode = barX > barY ? 'pillarbox' : barY > barX ? 'letterbox' : 'exact';
+  return {
+    canvasW, canvasH,
+    contentW: Math.round(w),
+    contentH: Math.round(h),
+    barX, barY, mode,
+    scale: round(scale, 3),
+    usedPct: round(((w * h) / (canvasW * canvasH)) * 100, 1),
   };
 }
 

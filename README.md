@@ -8,33 +8,42 @@ vollständig offline nutzbar.
 
 ## Funktionen
 
+Alle Bereiche sind einklappbar; der Zustand wird im Gerät gemerkt.
+
 **Wand**
-- Panel-Bibliothek (P1.9 bis P10, 500×500 bis 960×960) oder frei definierbares Kabinett
-- Raster über Stepper oder aus einem Zielmaß in Metern (auf- oder abrunden)
-- Maß, Fläche, Auflösung, Pixelabstand, Seitenverhältnis, Diagonale
+- Größe direkt in Metern eingeben — die Modulzahl wird gerundet, die Abweichung
+  vom Zielmaß ausgewiesen und lässt sich mit ± modulweise nachjustieren
+- Drei feste Modultypen aus der Modulliste (496-2,0 · uS2+ · rX3ioBF) plus
+  frei konfigurierbares eigenes Modul
+- Maß, Fläche, Auflösung, Pixelabstand, Seitenverhältnis, Diagonale, Bautiefe
 - Gewicht gesamt, je Spalte und als Traglast je Meter Breite (Rigging)
-- Abgleich mit HD/UHD inklusive nötiger Skalierung
-- Betrachtungsabstände: Mindestabstand, komfortabler Abstand, volle Auflösung
+- Bildquelle & Betrachtung: Grafik der Einpassung in 16:9 mit den entstehenden
+  schwarzen Rändern in Pixeln, dazu Skalierung auf HD/UHD und die
+  Betrachtungsabstände
 
 **Signal**
-- Processor-Presets (1 GbE / 10 GbE) oder eigene Werte für Ports, Pixel je Port und Gesamtkapazität
-- Panels je Port aus Pixelbudget und Daisy-Chain-Limit, inklusive Angabe, was begrenzt
-- Anzahl benötigter Ports und Geräte, höchste Portlast, optionale Redundanz
-- Verkabelungsrichtung (spalten- oder zeilenweise), Startecke und Schlangenlinie
+- Drei feste Processoren (NovaPro UHD Jr · NovaStar VX4S · Brompton Tessera S8)
+  plus eigene Werte für Ports, Pixelbudget und Gesamtkapazität
+- Bildraten-Tabelle: Pixel je Port und Module je Port für 24 bis 120 Hz,
+  direkt anwählbar; das Daisy-Chain-Limit wird gekennzeichnet
+- Module je Port, benötigte Ports und Geräte, höchste Portlast, Redundanz
+- Verkabelungsrichtung (spalten- oder zeilenweise), Startecke, Schlangenlinie
 
 **Strom**
 - Netzform: Spannung, Sicherung, Ausnutzung, ein- oder dreiphasig
-- Belastbarkeit je Stromkreis, Panels je Kreis automatisch oder manuell
+- Belastbarkeit je Stromkreis, Module je Kreis automatisch oder manuell
 - Leistung max/ø, W/m², Strom je Phase, empfohlene Einspeisung (CEE)
 - Verteilung der Kreise auf die Phasen, Hinweis auf Einschaltstrom
 
 **Plan**
-- Maßstäbliche SVG-Grafik der Wand mit Panelnummern und Bemaßung
+- Maßstäbliche SVG-Grafik der Wand mit Modulnummern und Bemaßung
 - Overlay umschaltbar: Signalwege, Stromgruppen oder reines Raster
 - Farbige Kettenverläufe mit Startpunkt, Laufrichtung und Legende je Port/Kreis
-- Zoom-Modus für kleine Displays, Export als SVG, Textzusammenfassung, Druck/PDF
+- Zoom-Modus für kleine Displays, Export als SVG, Textzusammenfassung, Druck
 
 **Projekte**
+- Baumappe als PDF: vierseitig mit Übersicht, Signalplan, Stromplan und
+  Modulraster samt Notizen — wahlweise quer, mit oder ohne Listen und Nummern
 - Automatische Sicherung des aktuellen Stands im Gerät
 - Mehrere Projekte speichern, laden, löschen
 - Import/Export als JSON zum Weitergeben
@@ -82,9 +91,10 @@ npm run icons      # Icons aus tools/make-icons.mjs neu erzeugen
 | --- | --- |
 | `index.html` | Ansichten Wand, Signal, Strom, Plan, Projekte |
 | `css/app.css` | Dunkles Theme, Safe-Area, Tableiste, Druckansicht |
-| `js/data.js` | Panel-Bibliothek, Processor-Presets, Farben |
+| `js/data.js` | Modulbibliothek, Processor-Presets, Bildraten, Farben |
 | `js/calc.js` | Rechenkern: Scan-Reihenfolge, Kettenbildung, Kennzahlen |
-| `js/render.js` | SVG-Grafik der Wand und Legende |
+| `js/render.js` | SVG-Grafik der Wand, Legende, 16:9-Einpassung |
+| `js/pdf.js` | PDF-Baumappe (eigener PDF-Writer, ohne Abhängigkeiten) |
 | `js/state.js` | Defaults, Migration, Speicherung im Gerät |
 | `js/app.js` | Bindings, Ansichten, Export, PWA-Anbindung |
 | `sw.js` | Service Worker, App-Shell-Cache |
@@ -96,5 +106,5 @@ damit installierte Clients die neue Version laden.
 ## Hinweis
 
 Alle Werte sind Richtwerte für die Vorplanung. Vor Aufbau und Anschluss immer
-die Datenblätter der eingesetzten Panels, Processoren und der Stromverteilung
+die Datenblätter der eingesetzten Module, Processoren und der Stromverteilung
 prüfen. Elektrische Arbeiten gehören in Fachhand.

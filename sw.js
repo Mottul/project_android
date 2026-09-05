@@ -3,7 +3,7 @@
  * Bei Aenderungen an den Dateien CACHE hochzaehlen — alte Caches werden
  * beim Aktivieren geloescht.
  */
-const CACHE = 'ledplan-v1.0.0';
+const CACHE = 'ledplan-v1.1.0';
 
 const SHELL = [
   './',
@@ -13,6 +13,7 @@ const SHELL = [
   './js/app.js',
   './js/calc.js',
   './js/data.js',
+  './js/pdf.js',
   './js/render.js',
   './js/state.js',
   './icons/icon.svg',

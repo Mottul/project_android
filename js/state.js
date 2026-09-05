@@ -1,25 +1,29 @@
 /** Projekt-State, Defaults und Persistenz (localStorage). */
 
-import { PANELS, PROCESSORS } from './data.js';
+import { MODULES, PROCESSORS } from './data.js';
 
 const KEY_CURRENT = 'ledplan.current';
 const KEY_PROJECTS = 'ledplan.projects';
+const KEY_SECTIONS = 'ledplan.sections';
 
 export function defaultState() {
-  const panel = PANELS.find((p) => p.id === 'p2.6-500');
+  const mod = MODULES[0];
   const proc = PROCESSORS[0];
   return {
-    version: 1,
+    version: 2,
     name: 'Neues Projekt',
-    panelId: panel.id,
-    panel: { ...panel },
+    moduleId: mod.id,
+    module: { ...mod },
     grid: { cols: 12, rows: 6 },
+    // Zielmaß in Metern — die Modulzahl wird daraus gerundet.
+    size: { w: (12 * mod.w) / 1000, h: (6 * mod.h) / 1000 },
     signal: {
       processorId: proc.id,
       ports: proc.ports,
-      pxPort: proc.pxPort,
+      pxPort60: proc.pxPort60,
       pxTotal: proc.pxTotal,
-      maxChain: panel.chain,
+      hz: 60,
+      maxChain: mod.chain,
       orientation: 'v',
       start: 'tl',
       serpentine: true,
@@ -42,16 +46,45 @@ export function defaultState() {
   };
 }
 
-/** Fuegt fehlende Felder aus den Defaults ein (Vorwaertskompatibilitaet). */
+/**
+ * Fuegt fehlende Felder aus den Defaults ein und hebt Projekte aus Version 1
+ * an (dort hiessen die Module noch `panel`, und `pxPort` war absolut statt
+ * auf 60 Hz bezogen).
+ */
 export function migrate(raw) {
   const base = defaultState();
   if (!raw || typeof raw !== 'object') return base;
-  const merged = { ...base, ...raw };
-  for (const key of ['panel', 'grid', 'signal', 'power', 'view']) {
-    merged[key] = { ...base[key], ...(raw[key] || {}) };
+
+  const input = { ...raw };
+  if (input.panel && !input.module) {
+    input.module = input.panel;
+    input.moduleId = 'custom';
   }
-  merged.grid.cols = clampInt(merged.grid.cols, 1, 200, base.grid.cols);
-  merged.grid.rows = clampInt(merged.grid.rows, 1, 200, base.grid.rows);
+  if (input.signal?.pxPort && !input.signal.pxPort60) {
+    input.signal = { ...input.signal, pxPort60: input.signal.pxPort };
+  }
+  delete input.panel;
+  delete input.panelId;
+
+  const merged = { ...base, ...input };
+  for (const key of ['module', 'grid', 'size', 'signal', 'power', 'view']) {
+    merged[key] = { ...base[key], ...(input[key] || {}) };
+  }
+  delete merged.signal.pxPort;
+
+  // Unbekannte Presets als „eigenes“ fuehren, die Werte selbst bleiben erhalten.
+  if (!MODULES.some((m) => m.id === merged.moduleId)) merged.moduleId = 'custom';
+  if (!PROCESSORS.some((p) => p.id === merged.signal.processorId)) merged.signal.processorId = 'custom-p';
+
+  merged.grid.cols = clampInt(merged.grid.cols, 1, 100, base.grid.cols);
+  merged.grid.rows = clampInt(merged.grid.rows, 1, 100, base.grid.rows);
+  if (!input.size) {
+    merged.size = {
+      w: (merged.grid.cols * merged.module.w) / 1000,
+      h: (merged.grid.rows * merged.module.h) / 1000,
+    };
+  }
+  merged.version = base.version;
   return merged;
 }
 
@@ -65,6 +98,12 @@ export function clampNum(value, min, max, fallback = min) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+/** Zahl aus einem Eingabefeld lesen — „6,25“ und „6.25“ sind beide erlaubt. */
+export function parseDecimal(text) {
+  const n = Number(String(text).replace(',', '.').replace(/\s/g, ''));
+  return Number.isFinite(n) ? n : NaN;
 }
 
 export function loadCurrent() {
@@ -104,4 +143,22 @@ export function deleteProject(name) {
   const all = listProjects().filter((p) => p.name !== name);
   localStorage.setItem(KEY_PROJECTS, JSON.stringify(all));
   return all;
+}
+
+/** Auf-/zugeklappte Bereiche merken, damit die App so bleibt wie eingerichtet. */
+export function loadSections() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY_SECTIONS));
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveSections(map) {
+  try {
+    localStorage.setItem(KEY_SECTIONS, JSON.stringify(map));
+  } catch {
+    /* egal */
+  }
 }
