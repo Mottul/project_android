@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LED Wall Planner</title>
+<meta name="description" content="Mobile PWA zur Planung von LED-Walls: Größe, Auflösung, Verkabelung für Strom und Signalwege.">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LED Planner">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>LED Wall Planner</h1>
+    <button type="button" id="installBtn" class="ghost" hidden>Installieren</button>
+  </div>
+  <p class="summary" id="summary" aria-live="polite">—</p>
+</header>
+
+<main id="main">
+
+  <!-- ================= WAND ================= -->
+  <section class="view" id="view-wall" data-view="wall">
+
+    <details class="card" data-sec="wall-name" open>
+      <summary><h2>Projektname</h2><span class="sec-info" data-out="name"></span></summary>
+      <div class="sec-body">
+        <label class="field">
+          <span>Bezeichnung</span>
+          <input type="text" data-bind="name" autocomplete="off" enterkeyhint="done">
+        </label>
+      </div>
+    </details>
+
+    <details class="card" data-sec="wall-size" open>
+      <summary><h2>Größe</h2><span class="sec-info" data-out="size"></span></summary>
+      <div class="sec-body">
+        <div class="grid-2">
+          <label class="field">
+            <span>Breite (m)</span>
+            <input type="text" inputmode="decimal" id="sizeW" autocomplete="off" enterkeyhint="done">
+          </label>
+          <label class="field">
+            <span>Höhe (m)</span>
+            <input type="text" inputmode="decimal" id="sizeH" autocomplete="off" enterkeyhint="done">
+          </label>
+        </div>
+        <p class="hint">Die Wand wird auf ganze Module gerundet. Mit ± fein nachjustieren.</p>
+        <div class="grid-2">
+          <div class="stepper" data-stepper="grid.cols">
+            <span class="stepper-label">Module horizontal</span>
+            <div class="stepper-row">
+              <button type="button" data-step="-1" aria-label="Ein Modul weniger in der Breite">−</button>
+              <input type="number" inputmode="numeric" min="1" max="100" step="1" data-bind="grid.cols">
+              <button type="button" data-step="1" aria-label="Ein Modul mehr in der Breite">+</button>
+            </div>
+          </div>
+          <div class="stepper" data-stepper="grid.rows">
+            <span class="stepper-label">Module vertikal</span>
+            <div class="stepper-row">
+              <button type="button" data-step="-1" aria-label="Ein Modul weniger in der Höhe">−</button>
+              <input type="number" inputmode="numeric" min="1" max="100" step="1" data-bind="grid.rows">
+              <button type="button" data-step="1" aria-label="Ein Modul mehr in der Höhe">+</button>
+            </div>
+          </div>
+        </div>
+        <dl class="kv">
+          <div><dt>Ist-Maß</dt><dd data-out="size"></dd></div>
+          <div><dt>Raster</dt><dd data-out="grid"></dd></div>
+          <div><dt>Abweichung vom Zielmaß</dt><dd data-out="deviation"></dd></div>
+        </dl>
+      </div>
+    </details>
+
+    <details class="card" data-sec="wall-module" open>
+      <summary><h2>Module</h2><span class="sec-info" data-out="moduleLabel"></span></summary>
+      <div class="sec-body">
+        <label class="field">
+          <span>Typ</span>
+          <select id="moduleSelect"></select>
+        </label>
+        <p class="note ok" id="moduleNote"></p>
+        <div class="grid-2">
+          <label class="field"><span>Breite (mm)</span><input type="number" inputmode="numeric" min="50" max="2000" step="1" data-bind="module.w"></label>
+          <label class="field"><span>Höhe (mm)</span><input type="number" inputmode="numeric" min="50" max="2000" step="1" data-bind="module.h"></label>
+          <label class="field"><span>Tiefe (mm)</span><input type="number" inputmode="numeric" min="10" max="500" step="1" data-bind="module.d"></label>
+          <label class="field"><span>Gewicht (kg)</span><input type="number" inputmode="decimal" min="0.5" max="200" step="0.1" data-bind="module.kg"></label>
+          <label class="field"><span>Pixel horizontal</span><input type="number" inputmode="numeric" min="8" max="2048" step="1" data-bind="module.px"></label>
+          <label class="field"><span>Pixel vertikal</span><input type="number" inputmode="numeric" min="8" max="2048" step="1" data-bind="module.py"></label>
+          <label class="field"><span>Leistung ø (W)</span><input type="number" inputmode="numeric" min="1" max="5000" step="1" data-bind="module.pavg"></label>
+          <label class="field"><span>Leistung max (W)</span><input type="number" inputmode="numeric" min="1" max="5000" step="1" data-bind="module.pmax"></label>
+          <label class="field"><span>Max. Module/Kette</span><input type="number" inputmode="numeric" min="1" max="100" step="1" data-bind="signal.maxChain"></label>
+        </div>
+        <p class="hint">Pixelabstand aus Maß und Auflösung: <b data-out="pitch">—</b></p>
+      </div>
+    </details>
+
+    <details class="card" data-sec="wall-result" open>
+      <summary><h2>Ergebnis</h2><span class="sec-info" data-out="resShort"></span></summary>
+      <div class="sec-body">
+        <dl class="kv">
+          <div><dt>Maß (B × H)</dt><dd data-out="size"></dd></div>
+          <div><dt>Auflösung</dt><dd data-out="res"></dd></div>
+          <div><dt>Module gesamt</dt><dd data-out="count"></dd></div>
+          <div><dt>Fläche</dt><dd data-out="area"></dd></div>
+          <div><dt>Seitenverhältnis</dt><dd data-out="ratio"></dd></div>
+          <div><dt>Diagonale</dt><dd data-out="diag"></dd></div>
+          <div><dt>Bautiefe</dt><dd data-out="depth"></dd></div>
+          <div><dt>Gewicht gesamt</dt><dd data-out="weight"></dd></div>
+          <div><dt>Last je Meter Breite</dt><dd data-out="weightPerM"></dd></div>
+          <div><dt>Gewicht je Spalte</dt><dd data-out="weightPerCol"></dd></div>
+        </dl>
+      </div>
+    </details>
+
+    <details class="card" data-sec="wall-source" open>
+      <summary><h2>Bildquelle &amp; Betrachtung</h2><span class="sec-info" data-out="fitShort"></span></summary>
+      <div class="sec-body">
+        <div class="fit-wrap" id="fitGraphic"></div>
+        <dl class="kv">
+          <div><dt>Fläche im 16:9-Bild</dt><dd data-out="fitUsed"></dd></div>
+          <div><dt>Ränder bei 1920×1080</dt><dd data-out="fitHD"></dd></div>
+          <div><dt>Ränder bei 3840×2160</dt><dd data-out="fitUHD"></dd></div>
+          <div><dt>Passt in HD (1920×1080)</dt><dd data-out="hd"></dd></div>
+          <div><dt>Passt in UHD (3840×2160)</dt><dd data-out="uhd"></dd></div>
+          <div><dt>Mindestabstand</dt><dd data-out="distMin"></dd></div>
+          <div><dt>Komfortabler Abstand</dt><dd data-out="distComfort"></dd></div>
+          <div><dt>Voll aufgelöst ab</dt><dd data-out="distRetina"></dd></div>
+        </dl>
+        <p class="hint">Faustregel: ab etwa <em>Pixelabstand in mm = Abstand in m</em> verschwimmen die einzelnen LEDs.</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ================= SIGNAL ================= -->
+  <section class="view" id="view-signal" data-view="signal" hidden>
+
+    <details class="card" data-sec="sig-proc" open>
+      <summary><h2>Processor</h2><span class="sec-info" data-out="procLabel"></span></summary>
+      <div class="sec-body">
+        <label class="field">
+          <span>Typ</span>
+          <select id="procSelect"></select>
+        </label>
+        <p class="note ok" id="procNote"></p>
+        <div class="grid-2">
+          <label class="field"><span>Ports je Gerät</span><input type="number" inputmode="numeric" min="1" max="64" step="1" data-bind="signal.ports"></label>
+          <label class="field"><span>Pixel/Port bei 60 Hz</span><input type="number" inputmode="numeric" min="1000" step="1000" data-bind="signal.pxPort60"></label>
+          <label class="field"><span>Pixel gesamt</span><input type="number" inputmode="numeric" min="1000" step="1000" data-bind="signal.pxTotal"></label>
+          <label class="field"><span>Max. Module/Kette</span><input type="number" inputmode="numeric" min="1" max="100" step="1" data-bind="signal.maxChain"></label>
+        </div>
+        <label class="field">
+          <span>Bildrate</span>
+          <select data-bind="signal.hz" data-number id="hzSelect"></select>
+        </label>
+        <div class="table-wrap">
+          <table class="rates" id="rateTable"></table>
+        </div>
+        <p class="hint">Ein Gigabit-Port trägt bei 8 bit rund 650.000 px bei 60 Hz; die Datenrate steigt linear mit der Bildrate. Werte sind Richtwerte — Datenblatt prüfen.</p>
+        <label class="switch">
+          <input type="checkbox" data-bind="signal.redundancy">
+          <span>Redundanz einplanen (doppelte Portanzahl)</span>
+        </label>
+      </div>
+    </details>
+
+    <details class="card" data-sec="sig-route" open>
+      <summary><h2>Signalführung</h2><span class="sec-info" data-out="sigRoute"></span></summary>
+      <div class="sec-body">
+        <div class="seg" data-seg="signal.orientation">
+          <button type="button" data-value="v">Spalten</button>
+          <button type="button" data-value="h">Zeilen</button>
+        </div>
+        <label class="field">
+          <span>Startecke (Blickrichtung auf die Front)</span>
+          <select data-bind="signal.start" data-corners></select>
+        </label>
+        <label class="switch">
+          <input type="checkbox" data-bind="signal.serpentine">
+          <span>Schlangenlinie (jede zweite Reihe zurück)</span>
+        </label>
+      </div>
+    </details>
+
+    <details class="card" data-sec="sig-result" open>
+      <summary><h2>Ergebnis</h2><span class="sec-info" data-out="sigShort"></span></summary>
+      <div class="sec-body">
+        <dl class="kv">
+          <div><dt>Pixel je Modul</dt><dd data-out="pxModule"></dd></div>
+          <div><dt>Pixel je Port bei <b data-out="hzShort"></b></dt><dd data-out="pxPortNow"></dd></div>
+          <div><dt>Module je Port</dt><dd data-out="perPort"></dd></div>
+          <div><dt>Begrenzt durch</dt><dd data-out="limitedBy"></dd></div>
+          <div><dt>Ports benötigt</dt><dd data-out="portsNeeded"></dd></div>
+          <div><dt>Processoren</dt><dd data-out="processors"></dd></div>
+          <div><dt>Höchste Portlast</dt><dd data-out="portLoad"></dd></div>
+          <div><dt>Pixel gesamt</dt><dd data-out="totalPx"></dd></div>
+        </dl>
+        <div id="signalNotes"></div>
+      </div>
+    </details>
+  </section>
+
+  <!-- ================= STROM ================= -->
+  <section class="view" id="view-power" data-view="power" hidden>
+
+    <details class="card" data-sec="pow-net" open>
+      <summary><h2>Netz &amp; Absicherung</h2><span class="sec-info" data-out="netShort"></span></summary>
+      <div class="sec-body">
+        <div class="grid-2">
+          <label class="field"><span>Spannung (V)</span><input type="number" inputmode="numeric" min="100" max="480" step="1" data-bind="power.volt"></label>
+          <label class="field"><span>Sicherung (A)</span><input type="number" inputmode="numeric" min="1" max="125" step="1" data-bind="power.breaker"></label>
+          <label class="field"><span>Ausnutzung (%)</span><input type="number" inputmode="numeric" min="40" max="100" step="5" data-bind="power.derate"></label>
+          <label class="field">
+            <span>Phasen</span>
+            <select data-bind="power.phases" data-number>
+              <option value="1">1-phasig</option>
+              <option value="3">3-phasig (CEE)</option>
+            </select>
+          </label>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-bind="power.useAvg">
+          <span>Mit Durchschnittsleistung rechnen statt Maximum</span>
+        </label>
+        <p class="hint">Belastbarkeit je Stromkreis: <b data-out="circuitW">—</b> → <b data-out="autoPerCircuit">—</b></p>
+      </div>
+    </details>
+
+    <details class="card" data-sec="pow-circuits" open>
+      <summary><h2>Stromkreise</h2><span class="sec-info" data-out="circuits"></span></summary>
+      <div class="sec-body">
+        <label class="switch">
+          <input type="checkbox" data-bind="power.manual">
+          <span>Module je Kreis manuell festlegen</span>
+        </label>
+        <label class="field" id="perCircuitField">
+          <span>Module je Stromkreis</span>
+          <input type="number" inputmode="numeric" min="1" max="100" step="1" data-bind="power.perCircuit">
+        </label>
+        <div class="seg" data-seg="power.orientation">
+          <button type="button" data-value="v">Spalten</button>
+          <button type="button" data-value="h">Zeilen</button>
+        </div>
+        <label class="field">
+          <span>Startecke</span>
+          <select data-bind="power.start" data-corners></select>
+        </label>
+        <label class="switch">
+          <input type="checkbox" data-bind="power.serpentine">
+          <span>Schlangenlinie</span>
+        </label>
+      </div>
+    </details>
+
+    <details class="card" data-sec="pow-result" open>
+      <summary><h2>Ergebnis</h2><span class="sec-info" data-out="powShort"></span></summary>
+      <div class="sec-body">
+        <dl class="kv">
+          <div><dt>Leistung maximal</dt><dd data-out="pmax"></dd></div>
+          <div><dt>Leistung ø (Betrieb)</dt><dd data-out="pavg"></dd></div>
+          <div><dt>Leistung je m²</dt><dd data-out="wm2"></dd></div>
+          <div><dt>Stromkreise</dt><dd data-out="circuits"></dd></div>
+          <div><dt>Module je Kreis</dt><dd data-out="perCircuit"></dd></div>
+          <div><dt>Kreise je Phase</dt><dd data-out="circuitsPerPhase"></dd></div>
+          <div><dt>Strom maximal</dt><dd data-out="ampsMax"></dd></div>
+          <div><dt>Strom ø</dt><dd data-out="ampsAvg"></dd></div>
+          <div><dt>Empfohlene Einspeisung</dt><dd data-out="feed"></dd></div>
+        </dl>
+        <div id="powerNotes"></div>
+      </div>
+    </details>
+  </section>
+
+  <!-- ================= PLAN ================= -->
+  <section class="view" id="view-plan" data-view="plan" hidden>
+
+    <details class="card" data-sec="plan-graphic" open>
+      <summary><h2>Plan</h2><span class="sec-info" data-out="overlayLabel"></span></summary>
+      <div class="sec-body">
+        <div class="seg" data-seg="view.overlay">
+          <button type="button" data-value="data">Signal</button>
+          <button type="button" data-value="power">Strom</button>
+          <button type="button" data-value="none">Raster</button>
+        </div>
+        <div class="chip-row">
+          <label class="chip"><input type="checkbox" data-bind="view.numbers"><span>Nummern</span></label>
+          <label class="chip"><input type="checkbox" data-bind="view.dims"><span>Maße</span></label>
+          <label class="chip"><input type="checkbox" data-bind="view.zoom"><span>Groß</span></label>
+        </div>
+        <div class="wall-wrap" id="wall"></div>
+        <div id="legend"></div>
+      </div>
+    </details>
+
+    <details class="card" data-sec="plan-report" open>
+      <summary><h2>Zusammenfassung</h2><span class="sec-info">Text</span></summary>
+      <div class="sec-body">
+        <pre class="report" id="report"></pre>
+        <div class="btn-row">
+          <button type="button" class="ghost" id="copyReport">Text kopieren</button>
+          <button type="button" class="ghost" id="exportSvg">Plan als SVG</button>
+          <button type="button" class="ghost" id="printPlan">Drucken</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="card" data-sec="plan-notes" open>
+      <summary><h2>Notizen</h2><span class="sec-info" data-out="notesShort"></span></summary>
+      <div class="sec-body">
+        <textarea data-bind="notes" rows="4" placeholder="Rigging, Lieferant, Kabellängen …"></textarea>
+      </div>
+    </details>
+  </section>
+
+  <!-- ================= PROJEKTE ================= -->
+  <section class="view" id="view-projects" data-view="projects" hidden>
+
+    <details class="card" data-sec="prj-current" open>
+      <summary><h2>Aktuelles Projekt</h2><span class="sec-info" data-out="name"></span></summary>
+      <div class="sec-body">
+        <p class="hint">Wird automatisch im Gerät gespeichert und beim nächsten Start geladen.</p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="saveProject">Speichern</button>
+          <button type="button" class="ghost" id="newProject">Neu</button>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="ghost" id="exportJson">JSON-Export</button>
+          <button type="button" class="ghost" id="importJson">JSON-Import</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+    </details>
+
+    <details class="card" data-sec="prj-pdf" open>
+      <summary><h2>Baumappe als PDF</h2><span class="sec-info" data-out="pdfShort"></span></summary>
+      <div class="sec-body">
+        <p class="hint">
+          Erzeugt ein mehrseitiges PDF mit Deckblatt, allen Kennzahlen, Signal- und
+          Stromplan samt Port- und Kreislisten sowie den Notizen — zum Ausdrucken
+          oder zum Durchblättern am Telefon.
+        </p>
+        <div class="chip-row">
+          <label class="chip"><input type="checkbox" id="pdfNumbers" checked><span>Nummern</span></label>
+          <label class="chip"><input type="checkbox" id="pdfLists" checked><span>Listen</span></label>
+          <label class="chip"><input type="checkbox" id="pdfLandscape"><span>Quer</span></label>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="primary" id="exportPdf">PDF erstellen</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="card" data-sec="prj-list" open>
+      <summary><h2>Gespeicherte Projekte</h2><span class="sec-info" id="projectCount"></span></summary>
+      <div class="sec-body">
+        <div id="projectList"></div>
+      </div>
+    </details>
+
+    <details class="card" data-sec="prj-about">
+      <summary><h2>Über</h2><span class="sec-info" id="appVersion">—</span></summary>
+      <div class="sec-body">
+        <p class="hint">
+          Alle Werte sind Richtwerte für die Vorplanung und offline im Gerät gespeichert.
+          Vor Aufbau und Anschluss immer die Datenblätter der eingesetzten Module,
+          Processoren und der Stromverteilung prüfen. Elektrische Arbeiten gehören in Fachhand.
+        </p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Bereiche">
+  <button type="button" data-tab="wall" class="active" aria-current="page">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M3 13.5h18M9 4v14M15 4v14"/></svg><span>Wand</span>
+  </button>
+  <button type="button" data-tab="signal">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9a3 3 0 0 1 3 3v6a3 3 0 0 0 3 3h1"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="18" r="2"/></svg><span>Signal</span>
+  </button>
+  <button type="button" data-tab="power">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Strom</span>
+  </button>
+  <button type="button" data-tab="plan">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18M8 8v13"/></svg><span>Plan</span>
+  </button>
+  <button type="button" data-tab="projects">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Projekte</span>
+  </button>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

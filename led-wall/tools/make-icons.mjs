@@ -1,9 +1,12 @@
 /**
  * Erzeugt die PWA-Icons als PNG — ohne externe Abhaengigkeiten.
- * Aufruf: node tools/make-icons.mjs
+ * Aufruf: npm run icons (aus dem Repo-Wurzelverzeichnis)
  */
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
+
+/** Zielpfad relativ zu dieser Datei, unabhaengig vom Arbeitsverzeichnis. */
+const out = (name) => new URL(`../icons/${name}`, import.meta.url);
 
 const CRC = (() => {
   const t = new Uint32Array(256);
@@ -94,8 +97,8 @@ function icon(size, { maskable = false } = {}) {
   return png(size, size, buf);
 }
 
-writeFileSync('icons/icon-192.png', icon(192));
-writeFileSync('icons/icon-512.png', icon(512));
-writeFileSync('icons/icon-maskable-512.png', icon(512, { maskable: true }));
-writeFileSync('icons/icon-180.png', icon(180));
+writeFileSync(out('icon-192.png'), icon(192));
+writeFileSync(out('icon-512.png'), icon(512));
+writeFileSync(out('icon-maskable-512.png'), icon(512, { maskable: true }));
+writeFileSync(out('icon-180.png'), icon(180));
 console.log('Icons erzeugt.');

@@ -1,13 +1,13 @@
 {
-  "name": "led-wall-planner",
+  "name": "mottul-pwa-tools",
   "version": "1.1.0",
   "private": true,
-  "description": "Mobile PWA zur Planung von LED-Walls: Maße, Auflösung, Signalwege und Stromverkabelung.",
+  "description": "Sammlung offline nutzbarer PWA-Werkzeuge, je App ein eigener Unterordner.",
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node --test tests/*.test.mjs",
-    "icons": "node tools/make-icons.mjs"
+    "test": "node --test",
+    "icons": "node led-wall/tools/make-icons.mjs"
   },
   "license": "MIT"
 }
