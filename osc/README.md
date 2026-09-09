@@ -10,10 +10,11 @@ installierbar, ohne Konto und ohne Cloud.
 
 * **Zehn Bauteile** — Fader, Poti (auch Endlos-Encoder), Schalter, Taster, Bank,
   Auswahl, XY-Pad, Farbe, Anzeige und Text.
-* **Freies Raster.** Kacheln verschieben und aufziehen, 4 bis 24 Spalten,
-  „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen.
+* **Freies Raster.** Kacheln verschieben und an der Ecke unten rechts aufziehen,
+  4 bis 24 Spalten, „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen
+  (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest).
 * **Mehrere Seiten** je Projekt, Vorlagen fuer MadMapper und NovaStar,
-  Export/Import als JSON.
+  Export/Import als JSON, Zuruecksetzen je Seite oder fuers ganze Projekt.
 * **Feedback.** Eingehendes OSC bewegt die Regler mit — ausser man haelt gerade
   den Finger drauf.
 * **Monitor.** Zeigt gesendete und empfangene Nachrichten. Auf eine empfangene
@@ -29,8 +30,14 @@ Wer beim Ziehen **seitlich ausweicht**, bekommt einen feineren Griff (1/4, dann
 1/12) — wie am Pult. Taster geben ein kurzes Vibrieren.
 
 Im Bearbeiten-Modus (Stift oben rechts) verschiebt man Kacheln mit dem Finger,
-zieht sie an der Ecke groesser und tippt sie kurz an, um Adresse, Bereich und
-Farbe zu aendern.
+zieht sie an der **Ecke unten rechts** groesser und tippt sie kurz an, um
+Adresse, Bereich und Farbe zu aendern. Neue Bauteile kommen ueber
+**+ Bauteil** — oder indem man auf eine freie Stelle im Raster tippt, dann
+landet das Bauteil genau dort.
+
+Das Menue (☰) ist eine Liste: Seiten, Verbindung, Monitor, Projekt sichern &
+laden, Einstellungen, Zuruecksetzen, Hilfe — jeder Eintrag oeffnet ein eigenes,
+kurzes Blatt.
 
 ## Die Bruecke
 

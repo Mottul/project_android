@@ -1,14 +1,18 @@
 /**
  * OSC Pad — Zusammenbau: Ansicht, Seiten, Verbindung, Monitor, Speichern.
+ *
+ * Die Blaetter (Sheets) bilden einen kleinen Stapel: aus dem Menue geht es in
+ * ein Unterblatt, der Pfeil links fuehrt zurueck. Dadurch bleibt jedes Blatt
+ * kurz und man findet sich auch mit einer Hand zurecht.
  */
 
 import {
-  makeWidget, makePage, normalizeProject, autoArrange, placeMissing,
-  usedRows, rescale, findSlot, clamp, MIN_COLS, MAX_COLS,
+  makeWidget, makePage, normalizeProject, autoArrange, placeMissing, dropAt,
+  usedRows, rescale, findSlot, clamp, TYPES, TYPE_ORDER, MIN_COLS, MAX_COLS,
 } from './model.js';
 import { PRESETS, buildPreset, starterProject } from './presets.js';
 import { createWidget, setHaptics } from './widgets.js';
-import { attachEditing, buildPalette, buildInspector, duplicateWidget } from './editor.js';
+import { attachEditing, buildInspector, duplicateWidget } from './editor.js';
 import { createLink, defaultBridgeUrl } from './conn.js';
 import { formatMessage } from './osc.js';
 import {
@@ -16,7 +20,7 @@ import {
   loadLibrary, storeInLibrary, removeFromLibrary,
 } from './store.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -25,7 +29,8 @@ let project = loadProject();
 let settings = loadSettings();
 let mode = 'live';
 let selectedId = null;
-let instances = new Map();   // widget-id -> Widget-Instanz
+let pendingSlot = null;      // Zelle, in die das naechste Bauteil soll
+let instances = new Map();   // widget-id -> Instanz
 let byAddress = new Map();   // OSC-Adresse -> [Instanz]
 const logBuf = [];
 let logDirty = false;
@@ -35,10 +40,7 @@ const surface = $('#surface');
 const pageTabs = $('#pageTabs');
 
 const currentPage = () => project.pages.find((p) => p.id === project.currentPageId) || project.pages[0];
-
-function persist() {
-  saveProject(project);
-}
+const persist = () => saveProject(project);
 
 /* ------------------------------------------------------------ Verbindung -- */
 
@@ -56,26 +58,32 @@ const link = createLink({
   },
 });
 
+const STATUS_TEXT = { off: 'getrennt', connecting: 'verbinde …', open: 'verbunden', error: 'Fehler' };
+
 function paintConnection(s) {
   const dot = $('#connDot');
-  const lat = $('#connLat');
   dot.className = 'dot' + (s.status === 'open' ? ' on' : s.status === 'connecting' ? ' wait' : s.status === 'error' ? ' err' : '');
-  lat.textContent = s.status === 'open'
+  $('#connLat').textContent = s.status === 'open'
     ? (s.latency == null ? 'ok' : `${s.latency} ms`)
     : s.status === 'connecting' ? '…' : 'aus';
 
+  const mi = $('#miConn');
+  if (mi) mi.textContent = `${STATUS_TEXT[s.status]} · Ziel ${s.target.host}:${s.target.port}`;
+
   const box = $('#connBox');
   if (!box) return;
-  const label = { off: 'getrennt', connecting: 'verbinde …', open: 'verbunden', error: 'Fehler' }[s.status];
   box.replaceChildren();
   const line = (k, v) => {
     const d = document.createElement('div');
-    d.innerHTML = `<span class="k"></span> <b></b>`;
-    d.firstChild.textContent = `${k}:`;
-    d.querySelector('b').textContent = v;
+    const key = document.createElement('span');
+    key.className = 'k';
+    key.textContent = `${k}: `;
+    const val = document.createElement('b');
+    val.textContent = v;
+    d.append(key, val);
     return d;
   };
-  box.append(line('Bruecke', `${label}${s.bridge ? ` · ${s.bridge}` : ''}`));
+  box.append(line('Bruecke', `${STATUS_TEXT[s.status]}${s.bridge ? ` · ${s.bridge}` : ''}`));
   box.append(line('Ziel', `${s.target.host}:${s.target.port}`));
   box.append(line('Laufzeit', s.latency == null ? '–' : `${s.latency} ms`));
   box.append(line('Pakete', `${s.sent} gesendet · ${s.recv} empfangen`));
@@ -112,11 +120,17 @@ function renderTabs() {
   });
 }
 
+/**
+ * Zeilenhoehe. „Einpassen" gilt nur in der Live-Ansicht: beim Bearbeiten
+ * wuerde jede Groessenaenderung alle Zeilen mitschrumpfen — die Kachel saehe
+ * dann aus, als liesse sie sich nicht aufziehen.
+ */
 function fitRows() {
   const page = currentPage();
   const rows = usedRows(page.widgets);
-  surface.classList.toggle('fit', !!page.fit && rows > 0);
-  if (!page.fit || rows <= 0) {
+  const useFit = !!page.fit && rows > 0 && mode === 'live';
+  surface.classList.toggle('fit', useFit);
+  if (!useFit) {
     surface.style.removeProperty('--rowh');
     return;
   }
@@ -124,7 +138,7 @@ function fitRows() {
   const gap = parseFloat(cs.gap) || 8;
   const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   const h = surface.clientHeight - padY - gap * (rows - 1);
-  surface.style.setProperty('--rowh', `${Math.max(22, h / rows)}px`);
+  surface.style.setProperty('--rowh', `${Math.max(26, h / rows)}px`);
 }
 
 function renderSurface() {
@@ -150,6 +164,7 @@ function renderSurface() {
       if (w.id === selectedId) inst.el.classList.add('sel');
       const handle = document.createElement('div');
       handle.className = 'handle';
+      handle.setAttribute('aria-hidden', 'true');
       inst.el.append(handle);
     }
     surface.append(inst.el);
@@ -161,7 +176,7 @@ function renderSurface() {
     }
   }
 
-  $('#emptyHint').hidden = page.widgets.length > 0;
+  $('#emptyHint').hidden = page.widgets.length > 0 || mode === 'edit';
   fitRows();
 }
 
@@ -172,46 +187,83 @@ function setMode(next) {
   const on = next === 'edit';
   $('#btnMode').setAttribute('aria-pressed', String(on));
   $('#editbar').hidden = !on;
-  const page = currentPage();
-  $('#colRange').value = page.columns;
-  $('#colOut').textContent = page.columns;
-  $('#fitChk').checked = !!page.fit;
+  $('#colOut').textContent = currentPage().columns;
   renderSurface();
   if (!on) closeSheet();
 }
 
+/** Bauteil anlegen — an der angetippten Stelle, sonst am ersten freien Platz. */
 function addWidget(type) {
   const page = currentPage();
   const w = makeWidget(type);
   w.cw = Math.min(w.cw, page.columns);
-  const slot = findSlot(page.widgets, page.columns, w.cw, w.ch);
-  w.gx = slot.gx;
-  w.gy = slot.gy;
   page.widgets.push(w);
+  if (pendingSlot) {
+    dropAt(page.widgets, page.columns, w, { ...pendingSlot, cw: w.cw, ch: w.ch });
+  } else {
+    const slot = findSlot(page.widgets.filter((x) => x.id !== w.id), page.columns, w.cw, w.ch);
+    w.gx = slot.gx;
+    w.gy = slot.gy;
+  }
+  pendingSlot = null;
   selectedId = w.id;
   persist();
   renderSurface();
   openInspector(w);
 }
 
-/* ------------------------------------------------------------- Sheets --- */
+/* ------------------------------------------------------------- Blaetter -- */
 
-const SHEETS = ['#sheetConn', '#sheetMenu', '#sheetInsp'];
+const SHEETS = ['#sheetMenu', '#sheetPages', '#sheetConn', '#sheetMonitor', '#sheetProject',
+  '#sheetSettings', '#sheetReset', '#sheetHelp', '#sheetPick', '#sheetInsp'];
+let sheetStack = [];
 
-function openSheet(sel) {
+function showSheet(sel) {
   for (const s of SHEETS) $(s).hidden = s !== sel;
-  $('#scrim').hidden = false;
+  $('#scrim').hidden = !sel;
 }
+
+/** Blatt oeffnen; `stack` = aus einem anderen Blatt heraus (Pfeil zurueck). */
+function openSheet(sel, stack = false) {
+  if (stack) sheetStack.push(SHEETS.find((s) => !$(s).hidden) || null);
+  else sheetStack = [];
+  prepareSheet(sel);
+  showSheet(sel);
+}
+
+function backSheet() {
+  const prev = sheetStack.pop();
+  if (!prev) { closeSheet(); return; }
+  prepareSheet(prev);
+  showSheet(prev);
+}
+
 function closeSheet() {
-  for (const s of SHEETS) $(s).hidden = true;
-  $('#scrim').hidden = true;
+  sheetStack = [];
+  showSheet(null);
+}
+
+/** Inhalte auffrischen, bevor ein Blatt sichtbar wird. */
+function prepareSheet(sel) {
+  if (sel === '#sheetMenu') {
+    const page = currentPage();
+    $('#miPages').textContent = `${project.pages.length} ${project.pages.length === 1 ? 'Seite' : 'Seiten'} · aktuell „${page.name}"`;
+    $('#miProject').textContent = project.name;
+    paintConnection(link.state);
+  }
+  if (sel === '#sheetPages') { renderPageList(); $('#fitChk').checked = !!currentPage().fit; }
+  if (sel === '#sheetConn') fillConnForm();
+  if (sel === '#sheetMonitor') renderLog();
+  if (sel === '#sheetProject') { $('#inProject').value = project.name; renderLibrary(); }
+  if (sel === '#sheetReset') $('#resetPageInfo').textContent = `Ersetzt die Seite „${currentPage().name}" durch die gewaehlte Vorlage. Andere Seiten bleiben unberuehrt.`;
+  if (sel === '#sheetPick') renderPicker();
 }
 
 function openInspector(w) {
   const page = currentPage();
-  $('#inspTitle').textContent = w.label || 'Bauteil';
+  $('#inspTitle').textContent = w.label || TYPES[w.type].name;
   buildInspector($('#inspBody'), w, page, {
-    onChange: () => { persist(); renderSurface(); $('#inspTitle').textContent = w.label || 'Bauteil'; },
+    onChange: () => { persist(); renderSurface(); $('#inspTitle').textContent = w.label || TYPES[w.type].name; },
     onDelete: () => {
       page.widgets = page.widgets.filter((x) => x.id !== w.id);
       selectedId = null;
@@ -232,12 +284,33 @@ function openInspector(w) {
   openSheet('#sheetInsp');
 }
 
+/* ------------------------------------------------------ Bauteil-Auswahl -- */
+
+function renderPicker() {
+  const list = $('#pickList');
+  list.replaceChildren();
+  for (const type of TYPE_ORDER) {
+    const b = document.createElement('button');
+    b.className = 'menuitem';
+    b.type = 'button';
+    const t = document.createElement('span');
+    t.className = 'mi-t';
+    t.textContent = TYPES[type].name;
+    const s = document.createElement('span');
+    s.className = 'mi-s';
+    s.textContent = TYPES[type].hint;
+    b.append(t, s);
+    b.addEventListener('click', () => { closeSheet(); addWidget(type); });
+    list.append(b);
+  }
+}
+
 /* -------------------------------------------------------------- Monitor -- */
 
 function renderLog() {
   logDirty = false;
   const node = $('#log');
-  if (!node || $('#sheetMenu').hidden) return;
+  if (!node || $('#sheetMonitor').hidden) return;
   const showOut = $('#chkOut').checked;
   const showIn = $('#chkIn').checked;
   const rows = logBuf.filter((e) => (e.dir === 'out' ? showOut : e.dir === 'in' ? showIn : true)).slice(-120);
@@ -246,7 +319,7 @@ function renderLog() {
     const d = document.createElement('div');
     d.className = e.dir;
     const t = new Date(e.at);
-    const time = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+    const time = [t.getHours(), t.getMinutes(), t.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
     d.textContent = `${time}  ${e.dir === 'in' ? '←' : e.dir === 'out' ? '→' : '!'}  ${formatMessage(e.address, e.args)}${e.note ? `  (${e.note})` : ''}`;
     if (e.dir === 'in') {
       d.title = 'Bauteil aus dieser Adresse anlegen';
@@ -270,7 +343,8 @@ function widgetFromFeedback(entry) {
   if (typeof first === 'number' && (first > 1 || first < 0)) { w.min = 0; w.max = Math.max(1, Math.ceil(first)); }
   w.cw = Math.min(w.cw, page.columns);
   const slot = findSlot(page.widgets, page.columns, w.cw, w.ch);
-  w.gx = slot.gx; w.gy = slot.gy;
+  w.gx = slot.gx;
+  w.gy = slot.gy;
   page.widgets.push(w);
   selectedId = w.id;
   persist();
@@ -278,23 +352,28 @@ function widgetFromFeedback(entry) {
   openInspector(w);
 }
 
-/* --------------------------------------------------------- Menue-Inhalt -- */
+/* ---------------------------------------------------------- Seitenliste -- */
 
 function renderPageList() {
   const list = $('#pageList');
   list.replaceChildren();
   project.pages.forEach((p, i) => {
     const row = document.createElement('div');
-    row.className = 'item';
+    row.className = 'item' + (p.id === project.currentPageId ? ' cur' : '');
     const name = document.createElement('input');
     name.value = p.name;
     name.className = 'grow';
     name.addEventListener('input', () => { p.name = name.value; persist(); renderTabs(); });
+    name.addEventListener('focus', () => {
+      if (p.id === project.currentPageId) return;
+      project.currentPageId = p.id;
+      persist(); renderTabs(); renderSurface(); renderPageList();
+    });
     row.append(name);
 
-    const mk = (label, title, fn, cls = 'iconbtn') => {
+    const mk = (label, title, fn) => {
       const b = document.createElement('button');
-      b.className = cls;
+      b.className = 'iconbtn';
       b.type = 'button';
       b.textContent = label;
       b.title = title;
@@ -346,7 +425,7 @@ function renderLibrary() {
     open.textContent = 'Laden';
     open.addEventListener('click', () => {
       project = normalizeProject(p);
-      persist(); renderTabs(); renderSurface(); renderPageList();
+      persist(); renderTabs(); renderSurface(); renderLibrary();
       $('#inProject').value = project.name;
     });
     const del = document.createElement('button');
@@ -371,33 +450,29 @@ async function requestWakeLock() {
 
 /* ------------------------------------------------------------- Bindings -- */
 
+function setColumns(cols) {
+  const page = currentPage();
+  const next = clamp(cols, MIN_COLS, MAX_COLS);
+  if (next === page.columns) return;
+  rescale(page, next);
+  $('#colOut').textContent = next;
+  persist();
+  renderSurface();
+}
+
 function bind() {
-  $('#btnMenu').addEventListener('click', () => {
-    $('#inProject').value = project.name;
-    openSheet('#sheetMenu');   // erst oeffnen — renderLog zeichnet nur ins sichtbare Blatt
-    renderPageList();
-    renderLibrary();
-    renderLog();
-  });
-  $('#btnConn').addEventListener('click', () => { fillConnForm(); openSheet('#sheetConn'); });
+  $('#btnMenu').addEventListener('click', () => openSheet('#sheetMenu'));
+  $('#btnConn').addEventListener('click', () => openSheet('#sheetConn'));
   $('#btnMode').addEventListener('click', () => setMode(mode === 'edit' ? 'live' : 'edit'));
   $('#scrim').addEventListener('click', closeSheet);
   for (const b of $$('[data-close]')) b.addEventListener('click', closeSheet);
+  for (const b of $$('[data-back]')) b.addEventListener('click', backSheet);
+  for (const b of $$('[data-go]')) b.addEventListener('click', () => openSheet(b.dataset.go, true));
 
   /* Bearbeiten-Leiste */
-  buildPalette($('#palette'), addWidget);
-  $('#colRange').addEventListener('input', (ev) => {
-    const cols = clamp(Number(ev.target.value), MIN_COLS, MAX_COLS);
-    $('#colOut').textContent = cols;
-    rescale(currentPage(), cols);
-    persist();
-    renderSurface();
-  });
-  $('#fitChk').addEventListener('change', (ev) => {
-    currentPage().fit = ev.target.checked;
-    persist();
-    fitRows();
-  });
+  $('#btnAdd').addEventListener('click', () => { pendingSlot = null; openSheet('#sheetPick'); });
+  $('#colMinus').addEventListener('click', () => setColumns(currentPage().columns - 1));
+  $('#colPlus').addEventListener('click', () => setColumns(currentPage().columns + 1));
   $('#btnArrange').addEventListener('click', () => {
     const page = currentPage();
     autoArrange(page.widgets, page.columns);
@@ -411,17 +486,18 @@ function bind() {
     onChange: () => { persist(); renderSurface(); },
     onSelect: (id) => { selectedId = id; for (const t of $$('.tile', surface)) t.classList.toggle('sel', t.dataset.id === id); },
     onTap: (w) => openInspector(w),
+    onEmptyTap: (cell) => { pendingSlot = cell; openSheet('#sheetPick'); },
   });
 
   /* Verbindung */
-  const conn = () => ({
+  const readConn = () => ({
     url: $('#inUrl').value.trim(),
-    target: { host: $('#inHost').value.trim() || '127.0.0.1', port: Number($('#inPort').value) || 8010 },
+    target: { host: $('#inHost').value.trim() || '127.0.0.1', port: Number($('#inPort').value) || 8000 },
     listenPort: Number($('#inListen').value) || 0,
     nova: { host: $('#inNovaHost').value.trim(), port: Number($('#inNovaPort').value) || 5200 },
   });
   const saveConn = () => {
-    Object.assign(settings, conn());
+    Object.assign(settings, readConn());
     saveSettings(settings);
     applyConnSettings(false);
   };
@@ -432,24 +508,30 @@ function bind() {
   $('#btnDisconnect').addEventListener('click', () => link.disconnect());
 
   /* Seiten & Vorlagen */
-  const sel = $('#selPreset');
-  for (const p of PRESETS) {
-    const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = `${p.name} — ${p.hint}`;
-    sel.append(o);
+  for (const sel of [$('#selPreset'), $('#selResetPreset')]) {
+    for (const p of PRESETS) {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = `${p.name} — ${p.hint}`;
+      sel.append(o);
+    }
   }
   $('#btnAddPage').addEventListener('click', () => {
     const page = makePage(`Seite ${project.pages.length + 1}`, { fit: false });
     project.pages.push(page);
     project.currentPageId = page.id;
-    persist(); renderPageList(); renderTabs(); setMode('edit');
+    persist(); renderPageList(); renderTabs(); closeSheet(); setMode('edit');
   });
   $('#btnAddPreset').addEventListener('click', () => {
-    const page = buildPreset(sel.value);
+    const page = buildPreset($('#selPreset').value);
     project.pages.push(page);
     project.currentPageId = page.id;
     persist(); renderPageList(); renderTabs(); renderSurface();
+  });
+  $('#fitChk').addEventListener('change', (ev) => {
+    currentPage().fit = ev.target.checked;
+    persist();
+    fitRows();
   });
 
   /* Projekt */
@@ -458,11 +540,25 @@ function bind() {
   $('#btnExport').addEventListener('click', exportProject);
   $('#btnImport').addEventListener('click', () => $('#fileImport').click());
   $('#fileImport').addEventListener('change', importProject);
-  $('#btnReset').addEventListener('click', () => {
-    if (!confirm('Projekt auf die Vorlagen zuruecksetzen? Der aktuelle Aufbau geht verloren.')) return;
+
+  /* Zuruecksetzen */
+  $('#btnResetPage').addEventListener('click', () => {
+    const page = currentPage();
+    if (!confirm(`Seite „${page.name}" durch die Vorlage ersetzen?`)) return;
+    const fresh = buildPreset($('#selResetPreset').value);
+    const i = project.pages.indexOf(page);
+    fresh.id = page.id;
+    project.pages[i] = fresh;
+    selectedId = null;
+    persist(); renderTabs(); renderSurface();
+    closeSheet();
+  });
+  $('#btnResetAll').addEventListener('click', () => {
+    if (!confirm('Alle Seiten auf die Werkseinstellung zuruecksetzen? Der aktuelle Aufbau geht verloren.')) return;
     project = starterProject();
-    persist(); renderTabs(); renderSurface(); renderPageList();
-    $('#inProject').value = project.name;
+    selectedId = null;
+    persist(); renderTabs(); renderSurface();
+    closeSheet();
   });
 
   /* Einstellungen */
@@ -520,7 +616,7 @@ function importProject(ev) {
     try {
       project = normalizeProject(JSON.parse(String(reader.result)));
       persist();
-      renderTabs(); renderSurface(); renderPageList();
+      renderTabs(); renderSurface(); renderLibrary();
       $('#inProject').value = project.name;
     } catch {
       alert('Datei konnte nicht gelesen werden.');

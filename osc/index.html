@@ -36,27 +36,63 @@
 <main id="surface" class="surface" aria-label="Bedienpult"></main>
 
 <div class="hint" id="emptyHint" hidden>
-  <p><b>Leere Seite.</b> Auf ✎ tippen und unten ein Bauteil auswaehlen.</p>
+  <p><b>Leere Seite.</b><br>Oben rechts auf ✎ tippen und unten <b>+ Bauteil</b> waehlen.</p>
 </div>
 
 <!-- Werkzeugleiste im Bearbeiten-Modus -->
 <div class="editbar" id="editbar" hidden>
-  <div class="palette" id="palette"></div>
+  <p class="edithint">Kachel ziehen = verschieben · Ecke unten rechts = Groesse · antippen = Einstellungen</p>
   <div class="editrow">
-    <label class="mini">Spalten
-      <input type="range" id="colRange" min="4" max="24" step="1">
-      <output id="colOut"></output>
-    </label>
-    <label class="mini check"><input type="checkbox" id="fitChk"> einpassen</label>
-    <button class="btn ghost" id="btnArrange">Aufraeumen</button>
+    <button class="btn primary grow" id="btnAdd">+ Bauteil</button>
+    <button class="btn" id="btnArrange">Aufraeumen</button>
+    <span class="stepper" role="group" aria-label="Raster">
+      <button class="btn step" id="colMinus" aria-label="weniger Spalten">−</button>
+      <span class="stepval"><b id="colOut">12</b> Spalten</span>
+      <button class="btn step" id="colPlus" aria-label="mehr Spalten">+</button>
+    </span>
   </div>
 </div>
 
 <div class="scrim" id="scrim" hidden></div>
 
-<!-- ------------------------------------------------------------ Verbindung -->
+<!-- ================================================================ Menue -->
+<section class="sheet" id="sheetMenu" hidden aria-label="Menue">
+  <div class="sheet-head"><h2>OSC Pad</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+    <div class="menu">
+      <button class="menuitem" data-go="#sheetPages"><span class="mi-t">Seiten</span><span class="mi-s" id="miPages"></span></button>
+      <button class="menuitem" data-go="#sheetConn"><span class="mi-t">Verbindung</span><span class="mi-s" id="miConn"></span></button>
+      <button class="menuitem" data-go="#sheetMonitor"><span class="mi-t">Monitor</span><span class="mi-s">gesendete und empfangene Nachrichten</span></button>
+      <button class="menuitem" data-go="#sheetProject"><span class="mi-t">Projekt sichern &amp; laden</span><span class="mi-s" id="miProject"></span></button>
+      <button class="menuitem" data-go="#sheetSettings"><span class="mi-t">Einstellungen</span><span class="mi-s">Verbinden, Bildschirm, Vibrieren, Sperre</span></button>
+      <button class="menuitem" data-go="#sheetReset"><span class="mi-t">Zuruecksetzen</span><span class="mi-s">Seite oder ganzes Projekt auf die Vorlage</span></button>
+      <button class="menuitem" data-go="#sheetHelp"><span class="mi-t">Hilfe</span><span class="mi-s">Bruecke, Adressen, Bedienung</span></button>
+    </div>
+    <p class="note" id="verLine"></p>
+  </div>
+</section>
+
+<!-- ================================================================ Seiten -->
+<section class="sheet" id="sheetPages" hidden aria-label="Seiten">
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Seiten</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+    <div id="pageList" class="list"></div>
+    <div class="row wrap">
+      <button class="btn" id="btnAddPage">Leere Seite</button>
+      <select id="selPreset" class="sel" aria-label="Vorlage"></select>
+      <button class="btn" id="btnAddPreset">Vorlage anlegen</button>
+    </div>
+
+    <h3>Aktuelle Seite</h3>
+    <label class="check"><input type="checkbox" id="fitChk"> Auf Bildschirm einpassen (kein Scrollen)</label>
+    <p class="note">Wirkt nur in der Live-Ansicht. Beim Bearbeiten bleibt die
+      Zeilenhoehe fest, damit sich Kacheln vorhersehbar aufziehen lassen.</p>
+  </div>
+</section>
+
+<!-- ============================================================ Verbindung -->
 <section class="sheet" id="sheetConn" hidden aria-label="Verbindung">
-  <div class="sheet-head"><h2>Verbindung</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Verbindung</h2><button class="btn ghost" data-close>Fertig</button></div>
   <div class="sheet-body">
     <div class="statusbox" id="connBox"></div>
 
@@ -109,83 +145,97 @@
   </div>
 </section>
 
-<!-- ---------------------------------------------------------------- Menue -->
-<section class="sheet" id="sheetMenu" hidden aria-label="Menue">
-  <div class="sheet-head"><h2>OSC Pad</h2><button class="btn ghost" data-close>Fertig</button></div>
+<!-- =============================================================== Monitor -->
+<section class="sheet" id="sheetMonitor" hidden aria-label="Monitor">
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Monitor</h2><button class="btn ghost" data-close>Fertig</button></div>
   <div class="sheet-body">
-
-    <details class="card" open>
-      <summary>Seiten</summary>
-      <div class="card-body">
-        <div id="pageList" class="list"></div>
-        <div class="row wrap">
-          <button class="btn" id="btnAddPage">Neue Seite</button>
-          <select id="selPreset" class="sel" aria-label="Vorlage"></select>
-          <button class="btn" id="btnAddPreset">Vorlage anlegen</button>
-        </div>
-      </div>
-    </details>
-
-    <details class="card">
-      <summary>Projekt</summary>
-      <div class="card-body">
-        <label class="field"><span>Name</span><input id="inProject"></label>
-        <div class="row wrap">
-          <button class="btn" id="btnSaveLib">Sichern</button>
-          <button class="btn" id="btnExport">Exportieren</button>
-          <button class="btn" id="btnImport">Importieren</button>
-          <button class="btn danger" id="btnReset">Zuruecksetzen</button>
-        </div>
-        <input type="file" id="fileImport" accept="application/json,.json" hidden>
-        <div id="libList" class="list"></div>
-      </div>
-    </details>
-
-    <details class="card">
-      <summary>Einstellungen</summary>
-      <div class="card-body">
-        <label class="check"><input type="checkbox" id="chkAuto"> Beim Start automatisch verbinden</label>
-        <label class="check"><input type="checkbox" id="chkWake"> Bildschirm wach halten</label>
-        <label class="check"><input type="checkbox" id="chkHaptic"> Vibrieren beim Tasten</label>
-        <label class="check"><input type="checkbox" id="chkLock"> Bedienung sperren</label>
-      </div>
-    </details>
-
-    <details class="card">
-      <summary>Monitor</summary>
-      <div class="card-body">
-        <div class="row wrap">
-          <label class="check"><input type="checkbox" id="chkOut" checked> gesendet</label>
-          <label class="check"><input type="checkbox" id="chkIn" checked> empfangen</label>
-          <button class="btn ghost" id="btnClearLog">Leeren</button>
-        </div>
-        <div id="log" class="log" role="log"></div>
-        <p class="note">Auf eine empfangene Zeile tippen legt daraus ein Bauteil an —
-          so uebernimmst du Adressen direkt aus MadMapper.</p>
-      </div>
-    </details>
-
-    <details class="card">
-      <summary>Hilfe</summary>
-      <div class="card-body prose">
-        <p><b>Warum eine Bruecke?</b> OSC laeuft ueber UDP, und das kann kein Browser.
-          Das kleine Node-Programm <code>osc-bridge.mjs</code> auf dem Show-Rechner
-          macht aus den Nachrichten des Handys echte UDP-Pakete — und schickt
-          Feedback zurueck.</p>
-        <p><b>Adressen in MadMapper.</b> Am schnellsten per <i>OSC lernen</i>: in
-          MadMapper den Regler auswaehlen, Lernen einschalten, hier den Fader
-          bewegen. Umgekehrt geht es auch: einen Regler in MadMapper bewegen, die
-          Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.</p>
-        <p><b>Live bedienen.</b> Regler ziehen relativ, ein Antippen aendert nie
-          einen Wert. Seitlich ausweichen macht den Griff fein.</p>
-        <p class="muted" id="verLine"></p>
-      </div>
-    </details>
-
+    <div class="row wrap">
+      <label class="check"><input type="checkbox" id="chkOut" checked> gesendet</label>
+      <label class="check"><input type="checkbox" id="chkIn" checked> empfangen</label>
+      <button class="btn ghost" id="btnClearLog">Leeren</button>
+    </div>
+    <div id="log" class="log" role="log"></div>
+    <p class="note">Auf eine <b>empfangene</b> Zeile tippen legt daraus ein Bauteil an —
+      so uebernimmst du Adressen direkt aus MadMapper.</p>
   </div>
 </section>
 
-<!-- ----------------------------------------------------------- Inspektor -->
+<!-- =============================================================== Projekt -->
+<section class="sheet" id="sheetProject" hidden aria-label="Projekt">
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Projekt</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+    <label class="field"><span>Name</span><input id="inProject"></label>
+    <div class="row wrap">
+      <button class="btn primary" id="btnSaveLib">Sichern</button>
+      <button class="btn" id="btnExport">Als Datei</button>
+      <button class="btn" id="btnImport">Datei laden</button>
+    </div>
+    <input type="file" id="fileImport" accept="application/json,.json" hidden>
+    <h3>Gesicherte Projekte</h3>
+    <div id="libList" class="list"></div>
+  </div>
+</section>
+
+<!-- ========================================================= Einstellungen -->
+<section class="sheet" id="sheetSettings" hidden aria-label="Einstellungen">
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Einstellungen</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+    <label class="check"><input type="checkbox" id="chkAuto"> Beim Start automatisch verbinden</label>
+    <label class="check"><input type="checkbox" id="chkWake"> Bildschirm wach halten</label>
+    <label class="check"><input type="checkbox" id="chkHaptic"> Vibrieren beim Tasten</label>
+    <label class="check"><input type="checkbox" id="chkLock"> Bedienung sperren</label>
+    <p class="note">„Bedienung sperren" macht die Oberflaeche unempfindlich —
+      fuer den Transport in der Hosentasche.</p>
+  </div>
+</section>
+
+<!-- ========================================================= Zuruecksetzen -->
+<section class="sheet" id="sheetReset" hidden aria-label="Zuruecksetzen">
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Zuruecksetzen</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+    <h3>Diese Seite</h3>
+    <p class="note" id="resetPageInfo"></p>
+    <div class="row wrap">
+      <select id="selResetPreset" class="sel" aria-label="Vorlage"></select>
+      <button class="btn" id="btnResetPage">Seite ersetzen</button>
+    </div>
+
+    <h3>Ganzes Projekt</h3>
+    <p class="note">Stellt den Auslieferungszustand her: die Seiten
+      <b>MadMapper</b> und <b>NovaStar</b>, so wie beim ersten Start.
+      Verbindungseinstellungen bleiben erhalten.</p>
+    <button class="btn danger" id="btnResetAll">Auf Werkseinstellung zuruecksetzen</button>
+    <p class="note">Vorher lohnt sich „Projekt sichern &amp; laden → Sichern".</p>
+  </div>
+</section>
+
+<!-- ================================================================= Hilfe -->
+<section class="sheet" id="sheetHelp" hidden aria-label="Hilfe">
+  <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Hilfe</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body prose">
+    <p><b>Warum eine Bruecke?</b> OSC laeuft ueber UDP, und das kann kein Browser.
+      Das kleine Node-Programm <code>osc-bridge.mjs</code> auf dem Show-Rechner
+      macht aus den Nachrichten des Handys echte UDP-Pakete — und schickt
+      Feedback zurueck.</p>
+    <p><b>Adressen in MadMapper.</b> Am schnellsten per <i>OSC lernen</i>: in
+      MadMapper den Regler auswaehlen, Lernen einschalten, hier den Fader
+      bewegen. Umgekehrt geht es auch: einen Regler in MadMapper bewegen, die
+      Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.</p>
+    <p><b>Live bedienen.</b> Regler ziehen relativ, ein Antippen aendert nie
+      einen Wert. Seitlich ausweichen macht den Griff fein.</p>
+    <p><b>Bearbeiten.</b> Kachel ziehen verschiebt sie, die Ecke unten rechts
+      zieht sie auf, kurzes Antippen oeffnet die Einstellungen des Bauteils.
+      Liegt am Zielplatz schon etwas, weicht es nach unten aus.</p>
+  </div>
+</section>
+
+<!-- ====================================================== Bauteil einfuegen -->
+<section class="sheet" id="sheetPick" hidden aria-label="Bauteil einfuegen">
+  <div class="sheet-head"><h2>Bauteil einfuegen</h2><button class="btn ghost" data-close>Abbrechen</button></div>
+  <div class="sheet-body"><div class="menu" id="pickList"></div></div>
+</section>
+
+<!-- ============================================================= Inspektor -->
 <section class="sheet" id="sheetInsp" hidden aria-label="Bauteil">
   <div class="sheet-head"><h2 id="inspTitle">Bauteil</h2><button class="btn ghost" data-close>Fertig</button></div>
   <div class="sheet-body" id="inspBody"></div>

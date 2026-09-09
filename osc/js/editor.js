@@ -4,10 +4,15 @@
  * Verschoben wird im Raster — es rastet ein. Waehrend des Ziehens zeigt ein
  * Umriss, wo die Kachel landet; liegt dort schon etwas, weicht das nach unten
  * aus (sonst liesse sich auf einer vollen Seite nichts mehr umstellen). Ein
- * kurzes Antippen oeffnet den Inspektor.
+ * kurzes Antippen oeffnet den Inspektor, ein Tippen auf freie Rasterflaeche
+ * legt dort ein neues Bauteil an.
+ *
+ * Groesse: die Ecke unten rechts. Nicht nur der sichtbare Griff zaehlt, sondern
+ * eine ganze Ecke — auf kleinen Kacheln entsprechend kleiner, damit Verschieben
+ * moeglich bleibt.
  */
 
-import { TYPES, TYPE_ORDER, COLORS, clamp, fits, dropAt, minSize, MAX_ROWS, uid } from './model.js';
+import { COLORS, clamp, fits, dropAt, minSize, MAX_ROWS, uid } from './model.js';
 
 const TAP_PX = 8;
 const TAP_MS = 500;
@@ -41,15 +46,43 @@ export function attachEditing(surface, cbs) {
   };
   const hideGhost = () => { ghost?.remove(); ghost = null; };
 
+  /** Rasterzelle unter einem Punkt (fuer „auf freie Flaeche tippen"). */
+  const cellAt = (ev) => {
+    const page = cbs.getPage();
+    const r = surface.getBoundingClientRect();
+    const cs = getComputedStyle(surface);
+    const gap = parseFloat(cs.gap) || 8;
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const inner = r.width - padL - (parseFloat(cs.paddingRight) || 0);
+    const colPitch = (inner + gap) / page.columns;
+    const rowPitch = (parseFloat(cs.getPropertyValue('--rowh')) || 40) + gap;
+    const x = ev.clientX - r.left - padL + surface.scrollLeft;
+    const y = ev.clientY - r.top - padT + surface.scrollTop;
+    return {
+      gx: clamp(Math.floor(x / colPitch), 0, page.columns - 1),
+      gy: Math.max(0, Math.floor(y / rowPitch)),
+    };
+  };
+
   surface.addEventListener('pointerdown', (ev) => {
     if (!cbs.isEditing() || st) return;
     const tile = ev.target.closest('.tile');
-    if (!tile) return;
+    if (!tile) {
+      // Leere Rasterflaeche: merken, beim Loslassen ohne Bewegung ein Bauteil anbieten.
+      st = { empty: true, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, t0: Date.now(), cell: cellAt(ev), moved: false };
+      return;
+    }
     const page = cbs.getPage();
     const w = page.widgets.find((x) => x.id === tile.dataset.id);
     if (!w) return;
 
-    const resize = !!ev.target.closest('.handle');
+    // Ecke unten rechts zieht die Groesse — auf kleinen Kacheln kleiner, damit
+    // zum Verschieben genug Flaeche bleibt.
+    const box = tile.getBoundingClientRect();
+    const zone = Math.min(44, box.width * 0.4, box.height * 0.4);
+    const inCorner = ev.clientX > box.right - zone && ev.clientY > box.bottom - zone;
+    const resize = !!ev.target.closest('.handle') || inCorner;
     tile.setPointerCapture(ev.pointerId);
     st = {
       id: ev.pointerId, tile, w, resize,
@@ -67,6 +100,7 @@ export function attachEditing(surface, cbs) {
     if (!st || ev.pointerId !== st.id) return;
     const dx = ev.clientX - st.x0;
     const dy = ev.clientY - st.y0;
+    if (st.empty) { if (Math.hypot(dx, dy) >= TAP_PX) st.moved = true; return; }
     if (!st.moved && Math.hypot(dx, dy) < TAP_PX) return;
     if (!st.moved) { st.moved = true; st.tile.classList.add('moving'); }
 
@@ -96,6 +130,12 @@ export function attachEditing(surface, cbs) {
 
   const stop = (ev) => {
     if (!st || (ev && ev.pointerId !== st.id)) return;
+    if (st.empty) {
+      const { moved, cell, t0 } = st;
+      st = null;
+      if (!moved && Date.now() - t0 < TAP_MS) cbs.onEmptyTap?.(cell);
+      return;
+    }
     const { w, tile, moved, last } = st;
     try { tile.releasePointerCapture(st.id); } catch { /* egal */ }
     tile.classList.remove('moving');
@@ -112,20 +152,6 @@ export function attachEditing(surface, cbs) {
   };
   surface.addEventListener('pointerup', stop);
   surface.addEventListener('pointercancel', stop);
-}
-
-/* ------------------------------------------------------------- Palette --- */
-
-/** Bauteil-Palette im Bearbeiten-Modus. */
-export function buildPalette(node, onAdd) {
-  node.replaceChildren();
-  for (const type of TYPE_ORDER) {
-    const b = el('button', 'chip', TYPES[type].name);
-    b.type = 'button';
-    b.title = TYPES[type].hint;
-    b.addEventListener('click', () => onAdd(type));
-    node.append(b);
-  }
 }
 
 /* ------------------------------------------------------------ Inspektor --- */
@@ -154,6 +180,9 @@ function numInput(value, oninput, attrs = {}) {
   i.value = String(value);
   Object.assign(i, attrs);
   i.addEventListener('input', () => {
+    // Ein leeres Feld ist kein Wert — sonst schnappt die Kachel beim Loeschen
+    // der Zahl auf ihre Mindestgroesse, bevor die neue getippt ist.
+    if (i.value.trim() === '' || i.value === '-') return;
     const n = Number(i.value);
     if (Number.isFinite(n)) oninput(n);
   });
