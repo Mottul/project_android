@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OSC Pad">
+  <rect width="512" height="512" rx="113" fill="#0b0e13"/>
+  <g>
+    <rect x="97" y="97" width="86" height="318" rx="43" fill="#1c2430"/>
+    <path d="M97 168h86v204a43 43 0 0 1-43 43 43 43 0 0 1-43-43z" fill="#38bdf8"/>
+    <rect x="97" y="160" width="86" height="23" fill="#f5fAff"/>
+
+    <rect x="213" y="97" width="86" height="318" rx="43" fill="#1c2430"/>
+    <path d="M213 291h86v81a43 43 0 0 1-43 43 43 43 0 0 1-43-43z" fill="#22c55e"/>
+    <rect x="213" y="283" width="86" height="23" fill="#f5fAff"/>
+
+    <rect x="329" y="97" width="86" height="318" rx="43" fill="#1c2430"/>
+    <path d="M329 140h86v232a43 43 0 0 1-43 43 43 43 0 0 1-43-43z" fill="#eab308"/>
+    <rect x="329" y="132" width="86" height="23" fill="#f5fAff"/>
+  </g>
+</svg>

@@ -11,6 +11,7 @@ Live: **https://mottul.github.io/project_android/**
 | App | Adresse | Inhalt |
 | --- | --- | --- |
 | [LED Wall Planner](led-wall/) | `/led-wall/` | Größe, Auflösung, Gewicht, Signalwege, Stromkreise, Plan und PDF-Baumappe einer LED-Wand |
+| [OSC Pad](osc/) | `/osc/` | Frei belegbares OSC-Pult für MadMapper und NovaStar — Fader, Taster, XY, Farbe, Feedback und Monitor |
 
 ## Aufbau
 
@@ -18,6 +19,7 @@ Live: **https://mottul.github.io/project_android/**
 index.html          Startseite mit der App-Übersicht
 favicon.svg         Symbol der Startseite
 led-wall/           App: LED Wall Planner (eigenes Manifest, eigener Worker)
+osc/                App: OSC Pad — dazu bridge/osc-bridge.mjs für den Show-Rechner
 .github/workflows/  Deployment auf GitHub Pages
 ```
 
@@ -43,6 +45,8 @@ relativ, der Ordnername ist deshalb frei wählbar.
 npm start          # http://localhost:8080 — Startseite und alle Apps
 npm test           # Tests aller Apps
 npm run icons      # Icons des LED Wall Planners neu erzeugen
+npm run icons:osc  # Icons des OSC Pads neu erzeugen
+npm run bridge     # OSC-Brücke starten (liefert auch die App im LAN aus)
 ```
 
 Für Service Worker und Installation wird HTTPS oder `localhost` benötigt.

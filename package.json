@@ -1,13 +1,15 @@
 {
   "name": "mottul-pwa-tools",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Sammlung offline nutzbarer PWA-Werkzeuge, je App ein eigener Unterordner.",
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
     "test": "node --test",
-    "icons": "node led-wall/tools/make-icons.mjs"
+    "icons": "node led-wall/tools/make-icons.mjs",
+    "icons:osc": "node osc/tools/make-icons.mjs",
+    "bridge": "node osc/bridge/osc-bridge.mjs"
   },
   "license": "MIT"
 }

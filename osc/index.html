@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>OSC Pad</title>
+<meta name="description" content="OSC-Fernsteuerung fuer MadMapper und NovaStar: frei belegbares Pult mit Fadern, Tastern, XY-Pads und Feedback — offline nutzbar auf dem Handy.">
+<meta name="theme-color" content="#0b0e13">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+
+<header class="bar">
+  <button class="icon" id="btnMenu" aria-label="Menue">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+
+  <nav class="pagetabs" id="pageTabs" aria-label="Seiten"></nav>
+
+  <button class="status" id="btnConn" aria-label="Verbindung">
+    <span class="dot" id="connDot"></span>
+    <span class="lat" id="connLat">aus</span>
+  </button>
+
+  <button class="icon" id="btnMode" aria-label="Bearbeiten" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="M14.5 6.5 17.5 9.5"/></svg>
+  </button>
+</header>
+
+<main id="surface" class="surface" aria-label="Bedienpult"></main>
+
+<div class="hint" id="emptyHint" hidden>
+  <p><b>Leere Seite.</b> Auf ✎ tippen und unten ein Bauteil auswaehlen.</p>
+</div>
+
+<!-- Werkzeugleiste im Bearbeiten-Modus -->
+<div class="editbar" id="editbar" hidden>
+  <div class="palette" id="palette"></div>
+  <div class="editrow">
+    <label class="mini">Spalten
+      <input type="range" id="colRange" min="4" max="24" step="1">
+      <output id="colOut"></output>
+    </label>
+    <label class="mini check"><input type="checkbox" id="fitChk"> einpassen</label>
+    <button class="btn ghost" id="btnArrange">Aufraeumen</button>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<!-- ------------------------------------------------------------ Verbindung -->
+<section class="sheet" id="sheetConn" hidden aria-label="Verbindung">
+  <div class="sheet-head"><h2>Verbindung</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+    <div class="statusbox" id="connBox"></div>
+
+    <label class="field">
+      <span>Bruecke (WebSocket)</span>
+      <input id="inUrl" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="ws://192.168.1.20:8090">
+    </label>
+    <div class="row">
+      <button class="btn primary" id="btnConnect">Verbinden</button>
+      <button class="btn" id="btnDisconnect">Trennen</button>
+    </div>
+
+    <h3>OSC-Ziel</h3>
+    <div class="grid2">
+      <label class="field"><span>Host</span>
+        <input id="inHost" inputmode="decimal" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="127.0.0.1"></label>
+      <label class="field"><span>Port</span>
+        <input id="inPort" type="number" inputmode="numeric" min="1" max="65535"></label>
+    </div>
+    <p class="note">Der Port muss dem OSC-Eingang im Zielprogramm entsprechen
+      (MadMapper: <i>Preferences → OSC</i>). Host ist der Rechner, auf dem das
+      Programm laeuft — laeuft die Bruecke dort mit, genuegt <code>127.0.0.1</code>.</p>
+
+    <h3>Feedback</h3>
+    <label class="field"><span>Empfangsport der Bruecke</span>
+      <input id="inListen" type="number" inputmode="numeric" min="0" max="65535"></label>
+    <p class="note">Auf diesem Port hoert die Bruecke auf OSC und reicht alles an
+      das Handy weiter — Regler folgen dann dem Programm. 0 = aus.</p>
+
+    <h3>NovaStar-Prozessor</h3>
+    <div class="grid2">
+      <label class="field"><span>Host</span>
+        <input id="inNovaHost" inputmode="decimal" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="leer = aus"></label>
+      <label class="field"><span>Port</span>
+        <input id="inNovaPort" type="number" inputmode="numeric" min="1" max="65535"></label>
+    </div>
+    <p class="note">Adressen <code>/nova/brightness</code>, <code>/nova/blackout</code>,
+      <code>/nova/freeze</code>, <code>/nova/preset</code> uebersetzt die Bruecke in
+      das TCP-Protokoll des Prozessors (Standard-Port 5200).</p>
+
+    <h3>Bruecke einrichten</h3>
+    <ol class="steps">
+      <li><a id="dlBridge" href="./bridge/osc-bridge.mjs" download="osc-bridge.mjs">osc-bridge.mjs herunterladen</a> (auf den Rechner mit MadMapper).</li>
+      <li>Terminal/Eingabeaufforderung im Ordner oeffnen und starten:<br><code>node osc-bridge.mjs</code></li>
+      <li>Die Bruecke zeigt eine Adresse wie <code>http://192.168.1.20:8090</code> —
+        die hier oben eintragen (bzw. am Handy oeffnen).</li>
+    </ol>
+    <p class="note">Node.js ≥ 18 wird benoetigt. Die Bruecke hat keine Abhaengigkeiten
+      und laeuft nur im lokalen Netz.</p>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- Menue -->
+<section class="sheet" id="sheetMenu" hidden aria-label="Menue">
+  <div class="sheet-head"><h2>OSC Pad</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body">
+
+    <details class="card" open>
+      <summary>Seiten</summary>
+      <div class="card-body">
+        <div id="pageList" class="list"></div>
+        <div class="row wrap">
+          <button class="btn" id="btnAddPage">Neue Seite</button>
+          <select id="selPreset" class="sel" aria-label="Vorlage"></select>
+          <button class="btn" id="btnAddPreset">Vorlage anlegen</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Projekt</summary>
+      <div class="card-body">
+        <label class="field"><span>Name</span><input id="inProject"></label>
+        <div class="row wrap">
+          <button class="btn" id="btnSaveLib">Sichern</button>
+          <button class="btn" id="btnExport">Exportieren</button>
+          <button class="btn" id="btnImport">Importieren</button>
+          <button class="btn danger" id="btnReset">Zuruecksetzen</button>
+        </div>
+        <input type="file" id="fileImport" accept="application/json,.json" hidden>
+        <div id="libList" class="list"></div>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Einstellungen</summary>
+      <div class="card-body">
+        <label class="check"><input type="checkbox" id="chkAuto"> Beim Start automatisch verbinden</label>
+        <label class="check"><input type="checkbox" id="chkWake"> Bildschirm wach halten</label>
+        <label class="check"><input type="checkbox" id="chkHaptic"> Vibrieren beim Tasten</label>
+        <label class="check"><input type="checkbox" id="chkLock"> Bedienung sperren</label>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Monitor</summary>
+      <div class="card-body">
+        <div class="row wrap">
+          <label class="check"><input type="checkbox" id="chkOut" checked> gesendet</label>
+          <label class="check"><input type="checkbox" id="chkIn" checked> empfangen</label>
+          <button class="btn ghost" id="btnClearLog">Leeren</button>
+        </div>
+        <div id="log" class="log" role="log"></div>
+        <p class="note">Auf eine empfangene Zeile tippen legt daraus ein Bauteil an —
+          so uebernimmst du Adressen direkt aus MadMapper.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary>Hilfe</summary>
+      <div class="card-body prose">
+        <p><b>Warum eine Bruecke?</b> OSC laeuft ueber UDP, und das kann kein Browser.
+          Das kleine Node-Programm <code>osc-bridge.mjs</code> auf dem Show-Rechner
+          macht aus den Nachrichten des Handys echte UDP-Pakete — und schickt
+          Feedback zurueck.</p>
+        <p><b>Adressen in MadMapper.</b> Am schnellsten per <i>OSC lernen</i>: in
+          MadMapper den Regler auswaehlen, Lernen einschalten, hier den Fader
+          bewegen. Umgekehrt geht es auch: einen Regler in MadMapper bewegen, die
+          Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.</p>
+        <p><b>Live bedienen.</b> Regler ziehen relativ, ein Antippen aendert nie
+          einen Wert. Seitlich ausweichen macht den Griff fein.</p>
+        <p class="muted" id="verLine"></p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<!-- ----------------------------------------------------------- Inspektor -->
+<section class="sheet" id="sheetInsp" hidden aria-label="Bauteil">
+  <div class="sheet-head"><h2 id="inspTitle">Bauteil</h2><button class="btn ghost" data-close>Fertig</button></div>
+  <div class="sheet-body" id="inspBody"></div>
+</section>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

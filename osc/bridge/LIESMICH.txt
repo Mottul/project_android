@@ -1,0 +1,74 @@
+OSC-Bruecke fuer OSC Pad
+========================
+
+Warum das noetig ist
+--------------------
+OSC laeuft ueber UDP. Ein Browser kann kein UDP verschicken — deshalb sitzt
+dieses kleine Programm dazwischen:
+
+    Handy  --WebSocket-->  Bruecke  --UDP-->  MadMapper / Resolume / QLab
+    Handy  <-WebSocket--   Bruecke  <-UDP--   (Feedback)
+
+Es hat keine Abhaengigkeiten, braucht keine Installation und laeuft nur im
+lokalen Netz.
+
+
+Voraussetzung
+-------------
+Node.js ab Version 18 (https://nodejs.org, "LTS" nehmen).
+Pruefen:   node --version
+
+
+Starten
+-------
+Windows:  Ordner oeffnen, in die Adressleiste des Explorers "cmd" tippen,
+          Eingabetaste, dann:      node osc-bridge.mjs
+macOS:    Terminal oeffnen, "cd " tippen, den Ordner ins Fenster ziehen,
+          Eingabetaste, dann:      node osc-bridge.mjs
+
+Die Bruecke zeigt danach so etwas an:
+
+      Am Handy oeffnen:
+        http://192.168.1.20:8090
+
+Diese Adresse am Handy im Browser oeffnen — die App laeuft dann direkt vom
+Rechner, ohne Internet. Alternativ die App von der Webseite benutzen und in
+"Verbindung" ws://192.168.1.20:8090 eintragen.
+
+
+Einstellungen
+-------------
+Ziel, Feedback-Port und NovaStar-Adresse stellt die App ein. Die Schalter hier
+sind nur die Startwerte, bis sich das erste Handy meldet.
+
+  node osc-bridge.mjs --port 8091              anderer Web-Port
+  node osc-bridge.mjs --target 10.0.0.5:8000   OSC-Ziel (Startwert)
+  node osc-bridge.mjs --listen 9000            Feedback empfangen
+  node osc-bridge.mjs --nova 10.0.0.9          NovaStar-Prozessor (TCP 5200)
+  node osc-bridge.mjs --dir /pfad/zur/app      App-Ordner von Hand setzen
+  node osc-bridge.mjs --help                   Hilfe
+
+
+MadMapper
+---------
+In MadMapper unter Einstellungen -> OSC den Eingangsport ablesen und in der App
+unter "OSC-Ziel" eintragen. Laeuft die Bruecke auf demselben Rechner wie
+MadMapper, bleibt der Host 127.0.0.1.
+
+Welche Adresse welchen Regler steuert, legt MadMapper per "OSC lernen" fest:
+Regler auswaehlen, Lernen einschalten, in der App den Fader bewegen.
+
+
+NovaStar
+--------
+Adressen /nova/brightness (0..100), /nova/blackout, /nova/freeze und
+/nova/preset uebersetzt die Bruecke in das TCP-Protokoll des Prozessors
+(Standard-Port 5200). Dafuer in der App unter "NovaStar-Prozessor" die
+IP-Adresse eintragen.
+
+
+Sicherheit
+----------
+Die Bruecke nimmt Verbindungen aus dem lokalen Netz an und sendet OSC dorthin,
+wohin die App zeigt. Sie oeffnet nichts nach aussen — im Showbetrieb gehoert
+sie trotzdem in ein eigenes, geschlossenes Netz.
