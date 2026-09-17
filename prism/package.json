@@ -10,11 +10,11 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "icons": "node scripts/generate-icons.mjs",
-    "sync-core": "node scripts/sync-ffmpeg-core.mjs",
-    "predev": "node scripts/sync-ffmpeg-core.mjs",
-    "prebuild": "node scripts/sync-ffmpeg-core.mjs",
+    "predev": "npm run assets",
+    "prebuild": "npm run assets",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "assets": "node scripts/sync-ffmpeg-core.mjs && node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
