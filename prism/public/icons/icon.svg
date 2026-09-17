@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Standalone icon: literal colours, because librsvg and the OS icon
+       pipelines do not resolve CSS custom properties. -->
+  <defs>
+    <linearGradient id="prism" x1="96" y1="416" x2="416" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3FDCBE" />
+      <stop offset="52%" stop-color="#8AA6FF" />
+      <stop offset="100%" stop-color="#DE8FEC" />
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E2030" />
+      <stop offset="100%" stop-color="#121320" />
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="114" fill="url(#ground)" />
+
+  <!-- Incoming beam -->
+  <path d="M40 256 H150" stroke="#E8EAF2" stroke-width="26" stroke-linecap="round" opacity="0.5" />
+
+  <!-- Prism body -->
+  <path
+    d="M256 88 L442 424 L70 424 Z"
+    fill="url(#prism)"
+    fill-opacity="0.12"
+    stroke="url(#prism)"
+    stroke-width="30"
+    stroke-linejoin="round"
+  />
+
+  <!-- Refracted spectrum -->
+  <path d="M348 222 L482 176" stroke="#3FDCBE" stroke-width="26" stroke-linecap="round" />
+  <path d="M382 285 L490 268" stroke="#8AA6FF" stroke-width="26" stroke-linecap="round" />
+  <path d="M416 348 L482 370" stroke="#DE8FEC" stroke-width="26" stroke-linecap="round" />
+</svg>

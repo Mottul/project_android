@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#15161f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f7fa" media="(prefers-color-scheme: light)" />
+    <meta
+      name="description"
+      content="Prism wandelt Video, Bild und Audio in jedes gängige Format um — vollständig auf dem eigenen Gerät, ohne Upload."
+    />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <title>Prism — Medienkonverter</title>
+    <script>
+      // Applied before first paint so the shell never flashes the wrong theme.
+      (function () {
+        try {
+          var stored = localStorage.getItem('prism.theme')
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.dataset.theme = stored
+          } else {
+            document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: light)')
+              .matches
+              ? 'light'
+              : 'dark'
+          }
+        } catch (_) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      Prism rechnet vollständig im Browser — dafür wird JavaScript benötigt.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

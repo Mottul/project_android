@@ -1,3 +1,10 @@
 node_modules/
 .DS_Store
 *.log
+
+# Prism: Build-Ergebnis und erzeugte Dateien
+prism/dist/
+prism/public/ffmpeg/
+prism/public/icons/*.png
+prism/*.tsbuildinfo
+_site/

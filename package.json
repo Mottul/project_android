@@ -6,10 +6,15 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node --test",
+    "test": "node --test \"**/*.test.mjs\"",
     "icons": "node led-wall/tools/make-icons.mjs",
     "icons:osc": "node osc/tools/make-icons.mjs",
-    "bridge": "node osc/bridge/osc-bridge.mjs"
+    "bridge": "node osc/bridge/osc-bridge.mjs",
+    "prism:install": "npm ci --prefix prism",
+    "prism:dev": "npm run dev --prefix prism",
+    "prism:build": "npm run build --prefix prism",
+    "test:prism": "npm test --prefix prism",
+    "serve": "node prism/tools/serve-site.mjs"
   },
   "license": "MIT"
 }

@@ -1,0 +1,346 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Theme is driven by a data attribute, not the OS media query alone, so the
+   in-app toggle can override the system preference in both directions. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ===========================================================================
+   Base
+   ======================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+
+/* Numbers that sit in columns (sizes, durations, percentages) must not jitter
+   as they count up. */
+.tnum,
+input[type='number'],
+time,
+output {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--accent) 32%, transparent);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* ===========================================================================
+   Scrollbars - thin, tinted, and only where they belong.
+   ======================================================================== */
+
+.scroll-area {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.scroll-area::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-area::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 99px;
+}
+
+.scroll-area::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+  background-clip: content-box;
+}
+
+/* ===========================================================================
+   Signature surfaces
+   ======================================================================== */
+
+/* A single very large, very soft light source behind the whole app. It is what
+   stops a flat dark UI from reading as a black rectangle. */
+.app-backdrop::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      52rem 34rem at 14% -6%,
+      color-mix(in oklch, var(--spec-1) calc(var(--glow-strength) * 100%), transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      46rem 30rem at 88% 4%,
+      color-mix(in oklch, var(--spec-3) calc(var(--glow-strength) * 78%), transparent),
+      transparent 66%
+    ),
+    radial-gradient(
+      60rem 40rem at 50% 108%,
+      color-mix(in oklch, var(--spec-2) calc(var(--glow-strength) * 62%), transparent),
+      transparent 70%
+    );
+  filter: blur(6px);
+}
+
+/* Film grain. Two jobs: it hides the banding that huge soft gradients always
+   produce on 8-bit displays, and it gives the flat panels some tooth. */
+.app-backdrop::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.hairline {
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.glass {
+  background: color-mix(in oklch, var(--surface) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+/* The spectrum: the app's one piece of visual signature, reused for the logo,
+   progress and active states so it never reads as decoration. */
+.spectrum {
+  background-image: linear-gradient(
+    100deg,
+    var(--spec-1) 0%,
+    var(--spec-2) 52%,
+    var(--spec-3) 100%
+  );
+}
+
+.spectrum-text {
+  background-image: linear-gradient(
+    100deg,
+    var(--spec-1) 0%,
+    var(--spec-2) 54%,
+    var(--spec-3) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ===========================================================================
+   Motion
+   ======================================================================== */
+
+@keyframes prism-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@keyframes prism-rise {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes prism-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@keyframes prism-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes prism-sweep {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(320%); }
+}
+
+.animate-rise {
+  animation: prism-rise var(--t-slow) var(--ease-out) both;
+}
+
+.animate-breathe {
+  animation: prism-breathe 2.4s var(--ease) infinite;
+}
+
+.animate-spin-slow {
+  animation: prism-spin 1.1s linear infinite;
+}
+
+/* Indeterminate progress: a light sweeping along the spectrum bar. */
+.bar-indeterminate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--text) 45%, transparent),
+    transparent
+  );
+  animation: prism-sweep 1.4s var(--ease) infinite;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-3) 50%,
+    var(--surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: prism-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===========================================================================
+   Form controls Tailwind cannot reach cleanly
+   ======================================================================== */
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--range-fill, 50%),
+    var(--surface-3) var(--range-fill, 50%) 100%
+  );
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--t-fast) var(--ease);
+}
+
+input[type='range']:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(0.94);
+}
+
+input[type='range']::-moz-range-track {
+  height: 5px;
+  border-radius: 99px;
+  background: var(--surface-3);
+}
+
+input[type='range']::-moz-range-progress {
+  height: 5px;
+  border-radius: 99px;
+  background: var(--accent);
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+
+/* Native select keeps keyboard and mobile behaviour; only the chrome is ours. */
+select.prism-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
