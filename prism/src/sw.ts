@@ -39,13 +39,32 @@ const PRECACHE_URLS = self.__WB_MANIFEST.map((entry) =>
    Lifecycle
    ======================================================================== */
 
+/**
+ * Precache file by file instead of with `cache.addAll`.
+ *
+ * addAll is all-or-nothing: a single 404 rejects it, the install fails, and no
+ * worker ever activates — which would also take cross-origin isolation down
+ * with it. That is far too fragile a dependency for the feature that decides
+ * whether ffmpeg gets one thread or eight. Offline coverage degrades quietly
+ * instead.
+ */
+async function precache(): Promise<void> {
+  const cache = await caches.open(SHELL_CACHE)
+  const results = await Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(url)))
+  const failed = results.filter((r) => r.status === 'rejected').length
+  if (failed > 0) {
+    console.warn(
+      `[Prism SW] ${failed} von ${PRECACHE_URLS.length} Dateien nicht vorgeladen — ` +
+        'die App läuft weiter, ist aber möglicherweise nicht vollständig offline verfügbar.',
+    )
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      // Take over immediately: the sooner this worker controls the page, the
-      // sooner the single isolation reload can happen.
+    precache()
+      // Take over immediately: the sooner this worker is active, the sooner the
+      // single isolation reload can happen.
       .then(() => self.skipWaiting()),
   )
 })
