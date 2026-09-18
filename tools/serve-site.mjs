@@ -1,16 +1,18 @@
 /**
- * Serves the whole repository the way GitHub Pages does, with the built Prism
- * at /prism/ — the only way to check locally that the deployed layout, the
- * relative paths and the service worker actually work together.
+ * Serves the whole repository the way GitHub Pages does, with the apps that
+ * have a build step served from their `dist/` — the only way to check locally
+ * that the deployed layout, the relative paths and the service workers actually
+ * work together.
  *
- *   node prism/tools/serve-site.mjs            # wie GitHub Pages: KEINE Header
- *   node prism/tools/serve-site.mjs --headers  # wie Cloudflare/Netlify: mit COOP/COEP
+ *   node tools/serve-site.mjs            # wie GitHub Pages: KEINE Header
+ *   node tools/serve-site.mjs --headers  # wie Cloudflare/Netlify: mit COOP/COEP
  *
- * Ohne --headers muss der Service Worker die Isolation selbst herstellen. Zum
- * Prüfen im Browser die Konsole öffnen und `crossOriginIsolated` eingeben:
- * beim ersten Aufruf false, nach dem automatischen Reload true.
+ * Ohne --headers muss Prisms Service Worker die Cross-Origin-Isolation selbst
+ * herstellen. Zum Prüfen im Browser die Konsole öffnen und `crossOriginIsolated`
+ * eingeben: beim ersten Aufruf false, nach dem automatischen Reload true.
  *
- * Vorher einmal `npm --prefix prism run build` ausführen.
+ * Vorher die gebauten Apps einmal bauen:
+ *   npm run prism:build && npm run folio:build
  */
 import { createServer } from 'node:http'
 import { createReadStream } from 'node:fs'
@@ -19,8 +21,10 @@ import { dirname, extname, join, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const REPO = resolve(here, '../..')
-const PRISM_DIST = join(REPO, 'prism', 'dist')
+const REPO = resolve(here, '..')
+
+/** Apps that are built rather than published as they are, newest last. */
+const BUILT = ['prism', 'folio']
 
 const withHeaders = process.argv.includes('--headers')
 const PORT = Number(process.env.PORT ?? 8099)
@@ -52,9 +56,12 @@ function resolvePath(urlPath) {
   // the '/prism' prefix test below would never match.
   const clean = posix.normalize(decodeURIComponent(urlPath.split('?')[0])).replace(/^(\.\.\/)+/, '')
 
-  if (clean === '/prism' || clean.startsWith('/prism/')) {
-    const rest = clean.slice('/prism'.length) || '/'
-    return join(PRISM_DIST, rest === '/' ? 'index.html' : rest)
+  for (const app of BUILT) {
+    const prefix = `/${app}`
+    if (clean === prefix || clean.startsWith(`${prefix}/`)) {
+      const rest = clean.slice(prefix.length) || '/'
+      return join(REPO, app, 'dist', rest === '/' ? 'index.html' : rest)
+    }
   }
   return join(REPO, clean === '/' ? 'index.html' : clean)
 }
@@ -80,7 +87,7 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, () => {
   console.log(`Seite auf http://localhost:${PORT}/`)
-  console.log(`Prism auf  http://localhost:${PORT}/prism/`)
+  for (const app of BUILT) console.log(`  ${app} auf http://localhost:${PORT}/${app}/`)
   console.log(
     withHeaders
       ? 'COOP/COEP werden gesendet — wie bei Cloudflare Pages oder Netlify.'

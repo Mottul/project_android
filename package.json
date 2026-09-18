@@ -1,6 +1,6 @@
 {
   "name": "mottul-pwa-tools",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "Sammlung offline nutzbarer PWA-Werkzeuge, je App ein eigener Unterordner.",
   "type": "module",
@@ -14,7 +14,11 @@
     "prism:dev": "npm run dev --prefix prism",
     "prism:build": "npm run build --prefix prism",
     "test:prism": "npm test --prefix prism",
-    "serve": "node prism/tools/serve-site.mjs"
+    "folio:install": "npm ci --prefix folio",
+    "folio:dev": "npm run dev --prefix folio",
+    "folio:build": "npm run build --prefix folio",
+    "test:folio": "npm test --prefix folio",
+    "serve": "node tools/serve-site.mjs"
   },
   "license": "MIT"
 }

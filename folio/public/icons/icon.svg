@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Folio">
+  <!--
+    A sheet with a folded corner and a marked line: the two things the app does,
+    in one mark. Drawn on the 512 grid so the raster sizes land on whole pixels.
+  -->
+  <rect width="512" height="512" rx="112" fill="#181b21"/>
+  <path d="M150 104h140l76 76v228a24 24 0 0 1-24 24H150a24 24 0 0 1-24-24V128a24 24 0 0 1 24-24z"
+        fill="#f4f5f7"/>
+  <path d="M290 104l76 76h-76z" fill="#b9bec9"/>
+  <rect x="166" y="222" width="180" height="26" rx="8" fill="#ffd60a"/>
+  <rect x="166" y="284" width="140" height="14" rx="7" fill="#c3c8d2"/>
+  <rect x="166" y="322" width="164" height="14" rx="7" fill="#c3c8d2"/>
+  <path d="M196 384c26-22 52 22 78 0s52-22 74-4" fill="none" stroke="#2563eb"
+        stroke-width="18" stroke-linecap="round"/>
+</svg>

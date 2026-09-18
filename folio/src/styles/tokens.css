@@ -1,0 +1,170 @@
+/* ---------------------------------------------------------------------------
+   Folio design tokens.
+
+   The brief was "schlicht und einfach, auf Funktionalität ausgelegt", and a
+   document reader is the one kind of app where that is not just taste: the
+   interface sits directly around a page of someone else's typography, and
+   anything decorative competes with it. So the palette is one neutral ramp and
+   exactly one accent, surfaces are flat, and the only saturated colours in the
+   whole app are the highlighter inks — which belong to the document, not to the
+   interface.
+
+   Both themes are defined here. `data-theme` on the root element wins; without
+   it the operating system decides.
+--------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light dark;
+
+  /* — Neutrals, light —————————————————————————————————————— */
+  --bg: #f4f5f7;
+  --bg-sunk: #e9ebef;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --surface-3: #eceef2;
+
+  --line: #d7dae1;
+  --line-soft: #e6e8ed;
+  --line-strong: #b9bec9;
+
+  --text: #16181d;
+  --text-dim: #5a6070;
+  --text-faint: #858b99;
+  --text-on-accent: #ffffff;
+
+  /* — Accent. One hue, used for selection, focus and the active tool. —— */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #e4ecfd;
+  --accent-line: #a9c3f7;
+
+  /* — Status ——————————————————————————————————————————————— */
+  --ok: #15803d;
+  --warn: #b45309;
+  --danger: #c2261d;
+  --danger-soft: #fdeceb;
+
+  /* — Reader page backgrounds, switchable independently of the app. ——— */
+  --paper: #ffffff;
+  --paper-ink: #16181d;
+  --paper-edge: #cfd3db;
+
+  /* — Elevation. Barely there: panels are separated by lines, not shadow. */
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
+  --shadow-md: 0 4px 14px -4px rgb(16 24 40 / 0.14);
+  --shadow-lg: 0 18px 48px -18px rgb(16 24 40 / 0.34);
+
+  /* — Geometry ————————————————————————————————————————————— */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --tap: 44px; /* Minimum comfortable touch target. */
+  --bar: 52px; /* Height of the toolbars. */
+  --rail: 292px; /* Width of the sidebar. */
+
+  /* — Type ————————————————————————————————————————————————— */
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --duration: 140ms;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* — Neutrals, dark ————————————————————————————————————————— */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='hell']) {
+    --bg: #101216;
+    --bg-sunk: #0a0c0f;
+    --surface: #181b21;
+    --surface-2: #1e2229;
+    --surface-3: #262b34;
+
+    --line: #2c323c;
+    --line-soft: #232831;
+    --line-strong: #3d4552;
+
+    --text: #e8eaef;
+    --text-dim: #9aa1b0;
+    --text-faint: #6d7585;
+    --text-on-accent: #ffffff;
+
+    --accent: #5b8def;
+    --accent-hover: #7aa3f4;
+    --accent-soft: #1b2740;
+    --accent-line: #2f4573;
+
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --danger-soft: #331a1a;
+
+    --paper-edge: #000000;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 14px -4px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 18px 48px -18px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme='dunkel'] {
+  --bg: #101216;
+  --bg-sunk: #0a0c0f;
+  --surface: #181b21;
+  --surface-2: #1e2229;
+  --surface-3: #262b34;
+
+  --line: #2c323c;
+  --line-soft: #232831;
+  --line-strong: #3d4552;
+
+  --text: #e8eaef;
+  --text-dim: #9aa1b0;
+  --text-faint: #6d7585;
+  --text-on-accent: #ffffff;
+
+  --accent: #5b8def;
+  --accent-hover: #7aa3f4;
+  --accent-soft: #1b2740;
+  --accent-line: #2f4573;
+
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --danger-soft: #331a1a;
+
+  --paper-edge: #000000;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 14px -4px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 18px 48px -18px rgb(0 0 0 / 0.7);
+}
+
+/* ---------------------------------------------------------------------------
+   Reader themes.
+
+   Separate from the interface theme on purpose: reading a scanned document in a
+   dark room means a dark interface around a page that is still white, and
+   reading outdoors means the opposite. One switch cannot serve both.
+--------------------------------------------------------------------------- */
+
+[data-paper='hell'] { --paper: #ffffff; --paper-ink: #16181d; }
+[data-paper='sepia'] { --paper: #f6efe1; --paper-ink: #3b3226; }
+[data-paper='grau'] { --paper: #d8d9db; --paper-ink: #1b1d21; }
+[data-paper='dunkel'] { --paper: #15171b; --paper-ink: #d9dce3; }
+
+/**
+ * Dark reading of a PDF works by inverting the rendered page, because the page
+ * is an image and its colours cannot be re-chosen. Hue rotation puts colours
+ * back roughly where they were, so a red stamp stays red rather than turning
+ * cyan; it is not colour management, but it is the difference between a
+ * readable inverted page and an unusable one.
+ */
+[data-paper='dunkel'] .page-canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --duration: 0ms; }
+}

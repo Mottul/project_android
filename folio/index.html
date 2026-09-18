@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#181b21" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="description"
+      content="Folio liest PDF, EPUB, Bilder und Text, macht Notizen, Markierungen und Freihandzeichnungen, bearbeitet Text und exportiert mit einstellbarer Qualität — vollständig auf dem eigenen Gerät."
+    />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <title>Folio — Dokumente lesen und bearbeiten</title>
+    <script>
+      /*
+       * The real settings live in IndexedDB, which cannot be read before the
+       * first paint. So the two that decide what the first frame looks like are
+       * mirrored into localStorage and applied here — otherwise every start in
+       * dark mode begins with a white flash.
+       */
+      ;(function () {
+        try {
+          var theme = localStorage.getItem('folio.theme')
+          if (theme !== 'hell' && theme !== 'dunkel') {
+            theme = matchMedia('(prefers-color-scheme: light)').matches ? 'hell' : 'dunkel'
+          }
+          document.documentElement.dataset.theme = theme
+          document.documentElement.dataset.paper = localStorage.getItem('folio.paper') || 'hell'
+        } catch (_) {
+          document.documentElement.dataset.theme = 'hell'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      Folio arbeitet vollständig im Browser — dafür wird JavaScript benötigt.
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
