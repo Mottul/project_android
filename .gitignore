@@ -7,4 +7,12 @@ prism/dist/
 prism/public/ffmpeg/
 prism/public/icons/*.png
 prism/*.tsbuildinfo
+
+# Folio: Build-Ergebnis und erzeugte Dateien
+folio/dist/
+folio/public/pdfjs/
+folio/public/icons/*.png
+folio/.tsbuildinfo-*
+folio/*.tsbuildinfo
+
 _site/

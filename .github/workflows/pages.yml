@@ -6,8 +6,8 @@
 # unten greift nur, falls das Repository es doch erlaubt.
 #
 # led-wall und osc sind reines HTML/JS und werden unverändert übernommen.
-# prism ist ein Vite-Projekt und wird hier gebaut; nur das Build-Ergebnis landet
-# auf der Seite, nicht der Quellcode.
+# prism und folio sind Vite-Projekte und werden hier gebaut; nur das
+# Build-Ergebnis landet auf der Seite, nicht der Quellcode.
 name: Deploy PWA to GitHub Pages
 
 on:
@@ -37,7 +37,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: prism/package-lock.json
+          cache-dependency-path: |
+            prism/package-lock.json
+            folio/package-lock.json
 
       - name: Tests der HTML-Apps
         run: npm test
@@ -50,6 +52,15 @@ jobs:
 
       - name: Typen von Prism prüfen
         run: npm run typecheck --prefix prism
+
+      - name: Abhängigkeiten von Folio
+        run: npm ci --prefix folio
+
+      - name: Tests von Folio
+        run: npm run test:folio
+
+      - name: Typen von Folio prüfen
+        run: npm run typecheck --prefix folio
 
   deploy:
     name: Deployen
@@ -64,30 +75,42 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: prism/package-lock.json
+          cache-dependency-path: |
+            prism/package-lock.json
+            folio/package-lock.json
 
       - name: Prism bauen
         run: |
           npm ci --prefix prism
           npm run build --prefix prism
 
+      - name: Folio bauen
+        run: |
+          npm ci --prefix folio
+          npm run build --prefix folio
+
       - name: Seite zusammenstellen
         run: |
-          mkdir -p _site/prism
-          # Alles außer Prism-Quellcode und Metadaten unverändert übernehmen,
-          # danach nur das Build-Ergebnis nach _site/prism legen.
+          mkdir -p _site/prism _site/folio
+          # Alles außer dem Quellcode der gebauten Apps und den Metadaten
+          # unverändert übernehmen, danach je App nur das Build-Ergebnis.
           rsync -a \
             --exclude '.git' \
             --exclude '.github' \
             --exclude '_site' \
             --exclude 'prism' \
+            --exclude 'folio' \
+            --exclude 'tools' \
             --exclude 'node_modules' \
             ./ _site/
           cp -r prism/dist/. _site/prism/
+          cp -r folio/dist/. _site/folio/
           echo "--- _site ---"
           ls -la _site
           echo "--- _site/prism ---"
           ls -la _site/prism
+          echo "--- _site/folio ---"
+          ls -la _site/folio
 
       - name: Pages konfigurieren
         uses: actions/configure-pages@v5
