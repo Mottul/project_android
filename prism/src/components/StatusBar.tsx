@@ -84,7 +84,7 @@ export function LogPanel() {
   if (!showLog) return null
 
   return (
-    <div className="flex h-56 shrink-0 flex-col border-t border-line bg-surface-sunk">
+    <div className="flex h-56 max-h-[45%] shrink-0 flex-col border-t border-line bg-surface-sunk">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-line-soft px-3">
         <span className="text-[11px] font-semibold tracking-wide text-dim uppercase">
           ffmpeg-Protokoll

@@ -84,6 +84,13 @@
   --inspector-w: 384px;
 }
 
+/* A phone in landscape has to spend its height on the queue, not on chrome. */
+@media (max-height: 600px) {
+  :root {
+    --header-h: 48px;
+  }
+}
+
 :root[data-theme='dark'] {
   --bg:            oklch(0.178 0.019 275);
   --bg-deep:       oklch(0.138 0.017 275);

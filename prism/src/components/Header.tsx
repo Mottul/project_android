@@ -23,7 +23,7 @@ export function Header() {
 
   return (
     <header
-      className="relative z-20 flex h-[var(--header-h)] shrink-0 items-center gap-3 border-b border-line-soft px-4"
+      className="relative z-20 flex h-[var(--header-h)] shrink-0 items-center gap-3 border-b border-line-soft px-3 sm:px-4"
       style={{ background: 'color-mix(in oklch, var(--bg) 82%, transparent)' }}
     >
       <div className="flex items-center gap-2.5">

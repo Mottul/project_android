@@ -1,4 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
+
 import { cx } from '@/lib/format-utils'
 
 /* ===========================================================================
@@ -420,20 +422,60 @@ export function Section({
   title,
   action,
   children,
+  open,
+  onToggle,
+  summary,
 }: {
   title: string
   action?: ReactNode
   children: ReactNode
+  /** Only meaningful together with `onToggle`. */
+  open?: boolean
+  /** Passing this turns the header into a disclosure button. */
+  onToggle?: () => void
+  /** Stands in for the body while collapsed, e.g. the active preset. */
+  summary?: ReactNode
 }) {
+  const heading = (
+    <h3 className="text-[11px] font-semibold tracking-[0.08em] text-faint uppercase">{title}</h3>
+  )
+
+  if (!onToggle) {
+    return (
+      <section className="flex flex-col gap-3 px-4 py-4">
+        <header className="flex items-center justify-between gap-2">
+          {heading}
+          {action}
+        </header>
+        {children}
+      </section>
+    )
+  }
+
   return (
-    <section className="flex flex-col gap-3 px-4 py-4">
-      <header className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold tracking-[0.08em] text-faint uppercase">
-          {title}
-        </h3>
-        {action}
-      </header>
-      {children}
+    <section className="flex flex-col px-4 py-4">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="-mx-1 flex min-h-9 items-center gap-2 rounded-sm px-1 text-left"
+      >
+        {heading}
+        {!open && summary !== undefined && (
+          <span className="ml-auto min-w-0 truncate text-[12px] text-dim">{summary}</span>
+        )}
+        <ChevronDown
+          size={14}
+          strokeWidth={2.2}
+          className={cx(
+            'shrink-0 text-faint transition-transform duration-200',
+            '[transition-timing-function:var(--ease-prism)]',
+            open ? 'rotate-180' : 'rotate-0',
+            open && 'ml-auto',
+          )}
+        />
+      </button>
+      {open && <div className="mt-3 flex flex-col gap-3">{children}</div>}
     </section>
   )
 }

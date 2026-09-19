@@ -651,6 +651,17 @@ export function acceptedExtensions(): string[] {
   return [...EXT_INDEX.keys()].map((e) => `.${e}`)
 }
 
+/**
+ * The `accept` attribute for a file input.
+ *
+ * The wildcards matter on phones: Android's picker matches on MIME type and
+ * greys out everything it cannot map back from an extension, so an
+ * extension-only list hands the user an empty file browser.
+ */
+export function acceptAttribute(): string {
+  return ['video/*', 'image/*', 'audio/*', ...acceptedExtensions()].join(',')
+}
+
 export const FAMILY_LABEL: Record<MediaFamily, string> = {
   video: 'Video',
   image: 'Bild',

@@ -1,7 +1,6 @@
 import { useShallow } from 'zustand/react/shallow'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  ChevronDown,
   Download,
   FileAudio,
   FileImage,
@@ -9,6 +8,7 @@ import {
   Info,
   Play,
   Square,
+  X,
 } from 'lucide-react'
 
 import {
@@ -22,10 +22,12 @@ import {
 import { cx } from '@/lib/format-utils'
 import { useAppStore, selectStats } from '@/store/useAppStore'
 import type { QualityMode, ResolutionPreset } from '@/engine/types'
+import { activePresetLabel } from '@/lib/presets'
 import { PresetGrid } from './PresetGrid'
 import {
   Button,
   Field,
+  IconButton,
   NumberInput,
   Section,
   Segmented,
@@ -40,9 +42,142 @@ const FAMILY_TABS: Array<{ value: MediaFamily; label: string; icon: typeof FileV
   { value: 'audio', label: 'Audio', icon: FileAudio },
 ]
 
+/**
+ * The inspector is one set of controls with two shells: a sidebar on a desktop
+ * window, and a sheet over the queue on anything narrower. Only one of the two
+ * is ever mounted — a 384px column does not fit on a phone at all, and the old
+ * layout squeezed the queue down to a few pixels rather than admitting that.
+ */
 export function Inspector() {
+  return (
+    <aside className="flex w-[var(--inspector-w)] shrink-0 flex-col border-l border-line-soft bg-bg">
+      <FamilyTabs />
+      <InspectorControls />
+      <InspectorActions />
+    </aside>
+  )
+}
+
+export function InspectorSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true">
+      <button
+        aria-label="Einstellungen schließen"
+        onClick={onClose}
+        className="animate-fade absolute inset-0 bg-bg-deep/70 backdrop-blur-[2px]"
+      />
+
+      <div className="animate-sheet pad-safe-b pad-safe-x short:max-h-[97%] relative flex max-h-[88%] min-h-0 flex-col rounded-t-xl border-t border-line bg-bg shadow-pop">
+        <span aria-hidden className="absolute inset-x-0 top-1.5 mx-auto h-1 w-10 rounded-full bg-line-strong" />
+
+        {/* In landscape the title row is 44px the controls do not get. The
+            tab row carries the close button instead. */}
+        <div className="short:hidden flex shrink-0 items-center gap-2 border-b border-line-soft py-2 pr-2 pl-4">
+          <h2 className="text-[13px] font-semibold text-text">Ausgabe-Einstellungen</h2>
+          <IconButton label="Schließen" className="ml-auto size-10" onClick={onClose}>
+            <X size={18} />
+          </IconButton>
+        </div>
+
+        <FamilyTabs onClose={onClose} />
+        <InspectorControls />
+        <InspectorActions onAfterStart={onClose} />
+      </div>
+    </div>
+  )
+}
+
+function FamilyTabs({ onClose }: { onClose?: () => void }) {
   const focusFamily = useAppStore((s) => s.focusFamily)
   const setFocusFamily = useAppStore((s) => s.setFocusFamily)
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 border-b border-line-soft px-3 py-2">
+      {FAMILY_TABS.map(({ value, label, icon: Icon }) => {
+        const active = focusFamily === value
+        return (
+          <button
+            key={value}
+            onClick={() => setFocusFamily(value)}
+            className={cx(
+              'relative flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-md py-1.5',
+              'text-[12px] font-medium transition-colors duration-200',
+              '[transition-timing-function:var(--ease-prism)]',
+              active ? 'bg-surface-2 text-text' : 'text-faint hover:text-dim',
+            )}
+          >
+            <Icon
+              size={13}
+              strokeWidth={2.1}
+              style={active ? { color: FAMILY_VAR[value] } : undefined}
+            />
+            {label}
+            {active && (
+              <span
+                aria-hidden
+                className="absolute inset-x-3 -bottom-2 h-[2px] rounded-full"
+                style={{ background: FAMILY_VAR[value] }}
+              />
+            )}
+          </button>
+        )
+      })}
+
+      {/* Wrapped rather than toggled on the button itself: IconButton sets its
+          own display, and two display utilities on one element is a coin toss. */}
+      {onClose && (
+        <span className="short:block ml-1 hidden shrink-0">
+          <IconButton label="Schließen" className="size-9" onClick={onClose}>
+            <X size={17} />
+          </IconButton>
+        </span>
+      )}
+    </div>
+  )
+}
+
+function InspectorControls() {
+  const focusFamily = useAppStore((s) => s.focusFamily)
+  const activePresetId = useAppStore((s) => s.activePresetId)
+  const presetsOpen = useAppStore((s) => s.presetsOpen)
+  const setPresetsOpen = useAppStore((s) => s.setPresetsOpen)
+
+  return (
+    <div className="scroll-area min-h-0 flex-1 divide-y divide-line-soft overscroll-contain">
+      <TargetFormatSection family={focusFamily} />
+
+      {/* Thirty preset cards were the tallest thing in the panel by a wide
+          margin. Collapsed they cost one row and still name the active one. */}
+      <Section
+        title="Vorlagen"
+        open={presetsOpen}
+        onToggle={() => setPresetsOpen(!presetsOpen)}
+        summary={activePresetLabel(activePresetId) ?? 'eigene Einstellungen'}
+      >
+        <PresetGrid />
+      </Section>
+
+      {focusFamily === 'video' && <VideoQuality />}
+      {focusFamily === 'image' && <ImageQuality />}
+      {focusFamily === 'audio' && <AudioQuality />}
+
+      {focusFamily === 'video' && <VideoAdvanced />}
+    </div>
+  )
+}
+
+function InspectorActions({ onAfterStart }: { onAfterStart?: () => void }) {
   const stats = useAppStore(useShallow(selectStats))
   const startAll = useAppStore((s) => s.startAll)
   const cancelAll = useAppStore((s) => s.cancelAll)
@@ -52,89 +187,42 @@ export function Inspector() {
   const busy = stats.running > 0
 
   return (
-    <aside className="flex w-[var(--inspector-w)] shrink-0 flex-col border-l border-line-soft bg-bg">
-      {/* Family switch: which set of controls is being edited. */}
-      <div className="flex shrink-0 gap-0.5 border-b border-line-soft px-3 py-2">
-        {FAMILY_TABS.map(({ value, label, icon: Icon }) => {
-          const active = focusFamily === value
-          return (
-            <button
-              key={value}
-              onClick={() => setFocusFamily(value)}
-              className={cx(
-                'relative flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5',
-                'text-[12px] font-medium transition-colors duration-200',
-                '[transition-timing-function:var(--ease-prism)]',
-                active ? 'bg-surface-2 text-text' : 'text-faint hover:text-dim',
-              )}
-            >
-              <Icon
-                size={13}
-                strokeWidth={2.1}
-                style={active ? { color: FAMILY_VAR[value] } : undefined}
-              />
-              {label}
-              {active && (
-                <span
-                  aria-hidden
-                  className="absolute inset-x-3 -bottom-2 h-[2px] rounded-full"
-                  style={{ background: FAMILY_VAR[value] }}
-                />
-              )}
-            </button>
-          )
-        })}
-      </div>
+    <footer className="flex shrink-0 flex-col gap-2 border-t border-line-soft bg-surface/60 p-3">
+      {busy ? (
+        <Button variant="secondary" size="lg" full icon={<Square size={14} />} onClick={cancelAll}>
+          Alles abbrechen
+        </Button>
+      ) : (
+        <Button
+          variant="primary"
+          size="lg"
+          full
+          icon={<Play size={15} strokeWidth={2.4} />}
+          disabled={runnable === 0}
+          onClick={() => {
+            startAll()
+            // On the sheet, get out of the way so the progress is visible.
+            onAfterStart?.()
+          }}
+        >
+          {runnable === 0
+            ? 'Keine Dateien in der Warteschlange'
+            : `${runnable} ${runnable === 1 ? 'Datei' : 'Dateien'} konvertieren`}
+        </Button>
+      )}
 
-      <div className="scroll-area flex-1 divide-y divide-line-soft">
-        <TargetFormatSection family={focusFamily} />
-
-        <Section title="Vorlagen">
-          <PresetGrid />
-        </Section>
-
-        {focusFamily === 'video' && <VideoQuality />}
-        {focusFamily === 'image' && <ImageQuality />}
-        {focusFamily === 'audio' && <AudioQuality />}
-
-        {focusFamily === 'video' && <VideoAdvanced />}
-      </div>
-
-      <footer className="flex shrink-0 flex-col gap-2 border-t border-line-soft bg-surface/60 p-3">
-        {busy ? (
-          <Button variant="secondary" size="lg" full icon={<Square size={14} />} onClick={cancelAll}>
-            Alles abbrechen
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            size="lg"
-            full
-            icon={<Play size={15} strokeWidth={2.4} />}
-            disabled={runnable === 0}
-            onClick={startAll}
-          >
-            {runnable === 0
-              ? 'Keine Dateien in der Warteschlange'
-              : `${runnable} ${runnable === 1 ? 'Datei' : 'Dateien'} konvertieren`}
-          </Button>
-        )}
-
-        {stats.done > 0 && (
-          <Button
-            variant="secondary"
-            size="md"
-            full
-            icon={<Download size={14} />}
-            onClick={() => void downloadAll()}
-          >
-            {stats.done === 1
-              ? 'Ergebnis herunterladen'
-              : `Alle ${stats.done} als ZIP herunterladen`}
-          </Button>
-        )}
-      </footer>
-    </aside>
+      {stats.done > 0 && (
+        <Button
+          variant="secondary"
+          size="md"
+          full
+          icon={<Download size={14} />}
+          onClick={() => void downloadAll()}
+        >
+          {stats.done === 1 ? 'Ergebnis herunterladen' : `Alle ${stats.done} als ZIP herunterladen`}
+        </Button>
+      )}
+    </footer>
   )
 }
 
@@ -581,125 +669,104 @@ function VideoAdvanced() {
   const isCopy = v.codec === 'copy'
 
   return (
-    <div>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
-      >
-        <span className="text-[11px] font-semibold tracking-[0.08em] text-faint uppercase">
-          Erweitert
-        </span>
-        <ChevronDown
-          size={14}
-          className={cx(
-            'text-faint transition-transform duration-200',
-            '[transition-timing-function:var(--ease-prism)]',
-            open && 'rotate-180',
-          )}
+    <Section title="Erweitert" open={open} onToggle={() => setOpen(!open)}>
+      <Field label="Bildrate">
+        <Select
+          value={String(v.fps)}
+          options={[
+            { value: '0', label: 'Wie Quelle' },
+            { value: '60', label: '60 fps' },
+            { value: '50', label: '50 fps' },
+            { value: '30', label: '30 fps' },
+            { value: '25', label: '25 fps' },
+            { value: '24', label: '24 fps — Kino' },
+            { value: '15', label: '15 fps' },
+          ]}
+          onChange={(fps) => patchVideo({ fps: Number(fps) })}
         />
-      </button>
+      </Field>
 
-      {open && (
-        <div className="flex flex-col gap-3.5 px-4 pb-4">
-          <Field label="Bildrate">
-            <Select
-              value={String(v.fps)}
-              options={[
-                { value: '0', label: 'Wie Quelle' },
-                { value: '60', label: '60 fps' },
-                { value: '50', label: '50 fps' },
-                { value: '30', label: '30 fps' },
-                { value: '25', label: '25 fps' },
-                { value: '24', label: '24 fps — Kino' },
-                { value: '15', label: '15 fps' },
-              ]}
-              onChange={(fps) => patchVideo({ fps: Number(fps) })}
-            />
-          </Field>
-
-          {!isCopy && !isHap && (
-            <Field label="Encoder-Tempo" hint={SPEED_HINT}>
-              <Select
-                value={v.speed}
-                options={[
-                  { value: 'ultrafast', label: 'Sehr schnell' },
-                  { value: 'veryfast', label: 'Schnell' },
-                  { value: 'fast', label: 'Zügig' },
-                  { value: 'medium', label: 'Ausgewogen' },
-                  { value: 'slow', label: 'Langsam' },
-                  { value: 'veryslow', label: 'Sehr langsam' },
-                ]}
-                onChange={(speed) => patchVideo({ speed: speed as typeof v.speed })}
-              />
-            </Field>
-          )}
-
-          {isHap && (
-            <Field
-              label="HAP-Chunks"
-              value={String(v.hapChunks)}
-              hint="Teilt jedes Bild auf, damit der Medienserver es beim Abspielen über mehrere Kerne dekodieren kann. 4 ist üblich."
-            >
-              <Slider
-                min={1}
-                max={8}
-                value={v.hapChunks}
-                onChange={(hapChunks) => patchVideo({ hapChunks })}
-                marks={['1', '8']}
-              />
-            </Field>
-          )}
-
-          {!isCopy && (
-            <Field label="Tonspur">
-              <Select
-                value={v.audioCodec}
-                options={[
-                  { value: 'aac', label: 'AAC' },
-                  { value: 'mp3', label: 'MP3' },
-                  { value: 'opus', label: 'Opus' },
-                  { value: 'flac', label: 'FLAC — verlustfrei' },
-                  { value: 'pcm', label: 'PCM — unkomprimiert' },
-                  { value: 'copy', label: 'Unverändert übernehmen' },
-                  { value: 'none', label: 'Kein Ton' },
-                ]}
-                onChange={(audioCodec) => patchVideo({ audioCodec })}
-              />
-            </Field>
-          )}
-
-          <Toggle
-            checked={v.twoPass}
-            onChange={(twoPass) => patchVideo({ twoPass })}
-            label="Zweipass-Kodierung"
-            hint="Wirkt nur bei Bitraten- oder Zielgrößen-Modus. Verdoppelt die Rechenzeit, trifft die Zielgröße aber genau."
+      {!isCopy && !isHap && (
+        <Field label="Encoder-Tempo" hint={SPEED_HINT}>
+          <Select
+            value={v.speed}
+            options={[
+              { value: 'ultrafast', label: 'Sehr schnell' },
+              { value: 'veryfast', label: 'Schnell' },
+              { value: 'fast', label: 'Zügig' },
+              { value: 'medium', label: 'Ausgewogen' },
+              { value: 'slow', label: 'Langsam' },
+              { value: 'veryslow', label: 'Sehr langsam' },
+            ]}
+            onChange={(speed) => patchVideo({ speed: speed as typeof v.speed })}
           />
-
-          <Toggle
-            checked={v.faststart}
-            onChange={(faststart) => patchVideo({ faststart })}
-            label="Faststart"
-            hint="Verschiebt den Index an den Dateianfang. Nötig, damit ein Video im Browser sofort startet."
-          />
-
-          <Toggle
-            checked={v.stripMetadata}
-            onChange={(stripMetadata) => patchVideo({ stripMetadata })}
-            label="Metadaten entfernen"
-            hint="Entfernt Kameradaten, Aufnahmeort und Software-Signaturen."
-          />
-
-          {caps && !caps.sharedArrayBuffer && (
-            <p className="rounded-md bg-warn/10 p-2.5 text-[11px] leading-snug text-warn">
-              Nur ein Thread aktiv. Für Mehrkern-Kodierung muss der Server die Header
-              <code className="mx-1 font-mono text-[10.5px]">Cross-Origin-Opener-Policy</code>
-              und
-              <code className="mx-1 font-mono text-[10.5px]">Cross-Origin-Embedder-Policy</code>
-              senden.
-            </p>
-          )}
-        </div>
+        </Field>
       )}
-    </div>
+
+      {isHap && (
+        <Field
+          label="HAP-Chunks"
+          value={String(v.hapChunks)}
+          hint="Teilt jedes Bild auf, damit der Medienserver es beim Abspielen über mehrere Kerne dekodieren kann. 4 ist üblich."
+        >
+          <Slider
+            min={1}
+            max={8}
+            value={v.hapChunks}
+            onChange={(hapChunks) => patchVideo({ hapChunks })}
+            marks={['1', '8']}
+          />
+        </Field>
+      )}
+
+      {!isCopy && (
+        <Field label="Tonspur">
+          <Select
+            value={v.audioCodec}
+            options={[
+              { value: 'aac', label: 'AAC' },
+              { value: 'mp3', label: 'MP3' },
+              { value: 'opus', label: 'Opus' },
+              { value: 'flac', label: 'FLAC — verlustfrei' },
+              { value: 'pcm', label: 'PCM — unkomprimiert' },
+              { value: 'copy', label: 'Unverändert übernehmen' },
+              { value: 'none', label: 'Kein Ton' },
+            ]}
+            onChange={(audioCodec) => patchVideo({ audioCodec })}
+          />
+        </Field>
+      )}
+
+      <Toggle
+        checked={v.twoPass}
+        onChange={(twoPass) => patchVideo({ twoPass })}
+        label="Zweipass-Kodierung"
+        hint="Wirkt nur bei Bitraten- oder Zielgrößen-Modus. Verdoppelt die Rechenzeit, trifft die Zielgröße aber genau."
+      />
+
+      <Toggle
+        checked={v.faststart}
+        onChange={(faststart) => patchVideo({ faststart })}
+        label="Faststart"
+        hint="Verschiebt den Index an den Dateianfang. Nötig, damit ein Video im Browser sofort startet."
+      />
+
+      <Toggle
+        checked={v.stripMetadata}
+        onChange={(stripMetadata) => patchVideo({ stripMetadata })}
+        label="Metadaten entfernen"
+        hint="Entfernt Kameradaten, Aufnahmeort und Software-Signaturen."
+      />
+
+      {caps && !caps.sharedArrayBuffer && (
+        <p className="rounded-md bg-warn/10 p-2.5 text-[11px] leading-snug text-warn">
+          Nur ein Thread aktiv. Für Mehrkern-Kodierung muss der Server die Header
+          <code className="mx-1 font-mono text-[10.5px]">Cross-Origin-Opener-Policy</code>
+          und
+          <code className="mx-1 font-mono text-[10.5px]">Cross-Origin-Embedder-Policy</code>
+          senden.
+        </p>
+      )}
+    </Section>
   )
 }
