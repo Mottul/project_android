@@ -26,9 +26,18 @@ import {
   PasswordRequired,
 } from '@/pdf/loader'
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
-import { collectLines, pageText, renderTextLayer, rectsFromSelection, type TextLine } from '@/pdf/textlayer'
+import {
+  collectLines,
+  pageText,
+  renderTextLayer,
+  rectsFromSelection,
+  type MarkedText,
+  type TextLine,
+} from '@/pdf/textlayer'
 import { sampleColors } from '@/pdf/sample'
 import { PageOverlay } from './overlay'
+import { GestureLayer, clamp, type GestureHost, type Point, type ZoomAnchor } from './gestures'
+import { TextDrag, type TextDragHost } from './text-drag'
 import { promptText, toast } from './feedback'
 import type { SearchHit, Viewer, ViewerHost } from './viewer'
 import { openMarkEditor } from './mark-editor'
@@ -56,7 +65,7 @@ interface PageSlot {
   lastSeen: number
 }
 
-export class PdfViewer implements Viewer {
+export class PdfViewer implements Viewer, GestureHost, TextDragHost {
   readonly element: HTMLElement
 
   private doc: PDFDocumentProxy | null = null
@@ -75,6 +84,13 @@ export class PdfViewer implements Viewer {
   private current = 0
   /** Viewport width the pages were last laid out for. */
   private laidOutFor = 0
+
+  private gestures: GestureLayer | null = null
+  private textDrag: TextDrag | null = null
+
+  /** Zoom bounds, shared with the pinch. */
+  readonly minScale = 0.25
+  readonly maxScale = 6
 
   constructor(private readonly host: ViewerHost) {
     this.pagesHost = h('div.pages')
@@ -122,6 +138,8 @@ export class PdfViewer implements Viewer {
     this.watchVisibility()
     this.watchResize()
     this.watchSelection()
+    this.gestures = new GestureLayer(this)
+    this.textDrag = new TextDrag(this.pagesHost, this)
     this.host.setPosition(1, this.slots.length)
   }
 
@@ -198,14 +216,34 @@ export class PdfViewer implements Viewer {
     }
   }
 
-  private readonly relayout = debounce(() => {
+  /**
+   * Re-lays out and re-renders, keeping an anchor point under the same finger.
+   *
+   * The anchor is applied between the layout and the render: at that moment the
+   * pages already have their new size, so the correction is a single scroll
+   * adjustment and nothing is ever drawn in the wrong place.
+   */
+  private applyLayout(anchor?: ZoomAnchor | null): void {
     this.layout()
+    if (anchor) this.restoreAnchor(anchor)
+
     // Everything rendered is now the wrong resolution.
     for (const slot of this.slots) {
       if (slot.rendered) this.release(slot, true)
     }
     this.renderVisible()
-  }, 120)
+  }
+
+  private readonly relayout = debounce(() => this.applyLayout(), 120)
+
+  private restoreAnchor(anchor: ZoomAnchor): void {
+    const slot = this.slots[anchor.page]
+    if (!slot) return
+
+    const box = slot.element.getBoundingClientRect()
+    this.element.scrollLeft += box.left + anchor.u * box.width - anchor.clientX
+    this.element.scrollTop += box.top + anchor.v * box.height - anchor.clientY
+  }
 
   zoomIn(): void {
     this.setZoom(this.currentScale() * 1.25)
@@ -215,18 +253,147 @@ export class PdfViewer implements Viewer {
     this.setZoom(this.currentScale() / 1.25)
   }
 
-  setZoom(value: number | 'breite' | 'seite'): void {
-    this.zoom = typeof value === 'number' ? Math.min(6, Math.max(0.2, value)) : value
+  setZoom(value: number | 'breite' | 'seite', anchor?: ZoomAnchor | null): void {
+    this.zoom =
+      typeof value === 'number' ? clamp(value, this.minScale, this.maxScale) : value
     setSetting('zoom', this.zoom)
-    this.relayout()
+    // Immediate rather than debounced: a pinch has already ended by the time
+    // this runs, and the page must not drift after the fingers are gone.
+    this.applyLayout(anchor ?? this.centreAnchor())
   }
 
-  /** The effective scale, so a zoom step out of "fit width" continues from there. */
-  private currentScale(): number {
+  /* ========================================================================
+     Gestures
+     ===================================================================== */
+
+  get viewport(): HTMLElement {
+    return this.element
+  }
+
+  get stage(): HTMLElement {
+    return this.pagesHost
+  }
+
+  currentScale(): number {
     if (typeof this.zoom === 'number') return this.zoom
     const slot = this.slots[this.current] ?? this.slots[0]
     if (!slot) return 1
     return this.pageWidth(slot) / (slot.width * (96 / 72))
+  }
+
+  /** The page under a point on screen, and where inside it. */
+  anchorAt(clientX: number, clientY: number): ZoomAnchor | null {
+    for (const slot of this.slots) {
+      const box = slot.element.getBoundingClientRect()
+      if (box.bottom < 0 || box.top > window.innerHeight) continue
+      if (clientY < box.top || clientY > box.bottom) continue
+
+      return {
+        page: slot.index,
+        u: box.width ? (clientX - box.left) / box.width : 0.5,
+        v: box.height ? (clientY - box.top) / box.height : 0.5,
+        clientX,
+        clientY,
+      }
+    }
+    return this.centreAnchor()
+  }
+
+  /**
+   * The anchor to fall back on: the middle of the viewport.
+   *
+   * Without one, any zoom change jumps to wherever the scroll offset happens to
+   * land — which after a large zoom step is rarely the passage being read.
+   */
+  private centreAnchor(): ZoomAnchor | null {
+    const slot = this.slots[this.current]
+    if (!slot) return null
+
+    const view = this.element.getBoundingClientRect()
+    const box = slot.element.getBoundingClientRect()
+    const clientX = view.left + view.width / 2
+    const clientY = view.top + view.height / 2
+
+    return {
+      page: slot.index,
+      u: box.width ? (clientX - box.left) / box.width : 0.5,
+      v: box.height ? (clientY - box.top) / box.height : 0.5,
+      clientX,
+      clientY,
+    }
+  }
+
+  commitZoom(scale: number, anchor: ZoomAnchor | null): void {
+    this.setZoom(scale, anchor)
+  }
+
+  cancelToolGesture(): void {
+    this.textDrag?.cancel()
+    for (const slot of this.slots) slot.overlay?.cancelGesture()
+  }
+
+  /**
+   * The scale at which a page exactly fills the viewport width.
+   *
+   * Everything about zooming on a phone is relative to this number and not to
+   * 100 %: an A4 page across 360 pixels is about 0.42, so a fixed threshold
+   * would call a comfortably enlarged page "zoomed out" and keep zooming in.
+   */
+  private fitScale(): number {
+    const slot = this.slots[this.current] ?? this.slots[0]
+    if (!slot) return 1
+    const available = Math.max(200, this.element.clientWidth - 28)
+    return available / (slot.width * (96 / 72))
+  }
+
+  /** Double tap: close in on what was tapped, or back out to the full width. */
+  onDoubleTap(point: Point): void {
+    const fit = this.fitScale()
+    const close = this.currentScale() > fit * 1.2
+
+    if (close) {
+      this.setZoom('breite')
+      return
+    }
+    this.setZoom(Math.min(this.maxScale, fit * 2.5), this.anchorAt(point.x, point.y))
+  }
+
+  /* ========================================================================
+     Marking text by dragging
+     ===================================================================== */
+
+  isMarking(): boolean {
+    return this.host.tools.isMarking
+  }
+
+  gesturesBlocked(): boolean {
+    return this.gestures?.isPinching ?? false
+  }
+
+  pageOf(node: Node): { index: number; element: HTMLElement } | null {
+    return this.slotForNode(node)
+  }
+
+  preview(marked: readonly MarkedText[]): void {
+    const byPage = new Map(marked.map((entry) => [entry.page, entry.rects]))
+    for (const slot of this.slots) {
+      slot.overlay?.preview(byPage.get(slot.index) ?? [], this.host.tools.highlightColor)
+    }
+  }
+
+  commit(marked: readonly MarkedText[]): void {
+    void this.storeMarked(marked, this.markTypeForTool())
+  }
+
+  private markTypeForTool(): Mark['type'] {
+    switch (this.host.tools.current) {
+      case 'unterstreichen':
+        return 'underline'
+      case 'durchstreichen':
+        return 'strike'
+      default:
+        return 'highlight'
+    }
   }
 
   /* ========================================================================
@@ -324,6 +491,7 @@ export class PdfViewer implements Viewer {
           onEditMark: (mark) => void this.editMark(mark),
           onPlaceText: (box) => this.openTextEditor(slot, box, null),
           sampleFill: (box) => this.sampleFill(slot, box),
+          gesturesBlocked: () => this.gesturesBlocked(),
         })
       }
       slot.overlay.render()
@@ -414,10 +582,33 @@ export class PdfViewer implements Viewer {
     }
   }
 
+  /**
+   * Puts a page into the mode the active tool needs.
+   *
+   * Three states, and the difference between the last two is the whole point of
+   * the change:
+   *
+   * * **reading** — the text layer selects normally, the browser scrolls with
+   *   one finger, and the system's own selection bar is welcome.
+   * * **marking** — the text layer still receives pointers, because the caret
+   *   under the finger is how the range is found, but selection is switched off
+   *   so no system bar can appear. The gesture belongs to `TextDrag`.
+   * * **drawing** — the text layer is out of the way entirely and the capture
+   *   canvas takes the pointer.
+   *
+   * In the last two the viewport gives up `touch-action`, or the first finger
+   * would scroll the page instead of working.
+   */
   private applyToolState(slot: PageSlot): void {
-    const drawing = this.host.tools.isDrawing
+    const { tools } = this.host
+    const drawing = tools.isDrawing
+    const marking = tools.isMarking
+
+    this.element.classList.toggle('is-tooling', tools.isActive || this.editMode)
     this.element.classList.toggle('is-drawing', drawing)
+
     slot.textLayer?.classList.toggle('is-inert', drawing || this.editMode)
+    slot.textLayer?.classList.toggle('is-marking', marking)
     slot.overlay?.syncCaptureSurface()
   }
 
@@ -440,9 +631,16 @@ export class PdfViewer implements Viewer {
     )
   }
 
+  /**
+   * The floating menu over a native selection.
+   *
+   * Only while reading. Once a tool is picked the gesture itself says what will
+   * happen, and a second menu next to the system's would be the very thing this
+   * change set out to remove.
+   */
   private updateSelectionMenu(): void {
     const selection = document.getSelection()
-    if (!selection || selection.isCollapsed || this.host.tools.isDrawing) {
+    if (!selection || selection.isCollapsed || this.host.tools.isActive) {
       this.hideSelectionMenu()
       return
     }
@@ -534,19 +732,36 @@ export class PdfViewer implements Viewer {
     this.hideSelectionMenu()
     if (!perPage.length) return
 
+    const last = await this.storeMarked(perPage, type)
+    if (withComment && last) await this.editMark(last)
+  }
+
+  /**
+   * Writes marked passages to the store — one mark per page.
+   *
+   * Shared by both routes into marking: the floating menu over a native
+   * selection on a pointer device, and the drag gesture on a touch screen.
+   */
+  private async storeMarked(
+    marked: readonly MarkedText[],
+    type: Mark['type'],
+  ): Promise<Mark | null> {
     let last: Mark | null = null
-    for (const entry of perPage) {
-      const mark = newMark(this.host.session.docId, type, {
-        page: entry.page,
-        color: this.host.tools.highlightColor,
-        rects: mergeLineRects(entry.rects),
-        quote: entry.text,
-        opacity: type === 'highlight' ? 0.35 : 1,
-      })
-      last = await this.host.session.add(mark)
+
+    for (const entry of marked) {
+      if (!entry.rects.length) continue
+      last = await this.host.session.add(
+        newMark(this.host.session.docId, type, {
+          page: entry.page,
+          color: this.host.tools.highlightColor,
+          rects: mergeLineRects(entry.rects),
+          quote: entry.text,
+          opacity: type === 'highlight' ? 0.35 : 1,
+        }),
+      )
     }
 
-    if (withComment && last) await this.editMark(last)
+    return last
   }
 
   private async copySelection(): Promise<void> {
@@ -815,6 +1030,10 @@ export class PdfViewer implements Viewer {
 
   destroy(): void {
     this.observer?.disconnect()
+    this.gestures?.destroy()
+    this.gestures = null
+    this.textDrag?.destroy()
+    this.textDrag = null
     for (const dispose of this.disposers) dispose()
     this.disposers = []
     this.closeTextEditor()

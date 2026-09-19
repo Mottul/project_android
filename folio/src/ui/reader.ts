@@ -14,7 +14,15 @@ import { MARK_LABEL, compareMarks, markSummary, HIGHLIGHT_COLORS, INK_COLORS } f
 import { settings, setSetting } from '@/store/settings'
 import type { OutlineEntry } from '@/pdf/loader'
 import { MarksSession } from './marks-session'
-import { ToolState, TOOL_ICON, TOOL_LABEL, type Tool } from './tools'
+import {
+  ToolState,
+  TOOL_ICON,
+  TOOL_LABEL,
+  groupOf,
+  groupsFor,
+  type Tool,
+  type ToolGroup,
+} from './tools'
 import { PdfViewer } from './pdf-viewer'
 import { EpubViewer } from './epub-viewer'
 import { ImageViewer, TextViewer } from './simple-viewers'
@@ -48,6 +56,10 @@ export class ReaderView implements ViewerHost {
   private readonly nameLabel: HTMLElement
   private readonly positionLabel: HTMLElement
   private readonly toolBar: HTMLElement
+  private readonly toolContext: HTMLElement
+  private readonly groups: ToolGroup[]
+  private popover: HTMLElement | null = null
+  private closePopoverListener: (() => void) | null = null
   private readonly rail: HTMLElement
   private readonly railBody: HTMLElement
   private readonly railTabs: HTMLElement
@@ -65,6 +77,10 @@ export class ReaderView implements ViewerHost {
     this.nameLabel = h('span.doc-name', {}, displayTitle(entry))
     this.positionLabel = h('span', { style: 'font-size:0.82rem;color:var(--text-faint);white-space:nowrap' })
     this.toolBar = h('div.tool-bar')
+    this.toolContext = h('div.tool-context')
+    this.groups = groupsFor(
+      entry.kind === 'pdf' ? 'pdf' : entry.kind === 'image' ? 'image' : 'flow',
+    )
     this.railBody = h('div.rail-body')
     this.railTabs = h('div.rail-tabs')
     this.rail = h('aside.rail', {}, this.railTabs, this.railBody)
@@ -85,7 +101,7 @@ export class ReaderView implements ViewerHost {
       onclick: () => void this.session.stepForward(),
     })
 
-    this.element = h('div.reader', {}, this.buildTopBar(), this.toolBar, this.main)
+    this.element = h('div.reader', {}, this.buildTopBar(), this.toolBar, this.toolContext, this.main)
     this.renderRailTabs()
     this.applyRailState()
   }
@@ -161,6 +177,7 @@ export class ReaderView implements ViewerHost {
   }
 
   destroy(): void {
+    this.closePopover()
     for (const dispose of this.disposers) dispose()
     this.disposers = []
     this.viewer?.destroy()
@@ -225,14 +242,14 @@ export class ReaderView implements ViewerHost {
         {},
         this.undoButton,
         this.redoButton,
-        h('button.icon-button', {
+        h('button.icon-button.zoom-button', {
           type: 'button',
           title: 'Verkleinern',
           'aria-label': 'Verkleinern',
           html: icon('zoomOut'),
           onclick: () => this.viewer?.zoomOut(),
         }),
-        h('button.icon-button', {
+        h('button.icon-button.zoom-button', {
           type: 'button',
           title: 'Vergrößern',
           'aria-label': 'Vergrößern',
@@ -258,74 +275,120 @@ export class ReaderView implements ViewerHost {
   }
 
   /**
-   * The tool bar is rebuilt whenever the tool changes.
+   * The tool bar: one button per group, and a second row for what the active
+   * tool needs.
    *
-   * It is a dozen buttons and a few swatches; rebuilding is simpler than
-   * tracking which of them need their pressed state updated, and at this size
-   * the difference is not measurable.
+   * Groups rather than tools because ten icon buttons plus a colour row came to
+   * about 560 px, and a phone is 360 — the colours were behind a scroll, which
+   * is the one thing you reach for constantly. Five groups fit with room to
+   * spare. Rebuilt wholesale on every change: it is a dozen elements, and
+   * tracking which of them need their pressed state updated would be more code
+   * than building them again.
    */
   private renderToolBar(): void {
     clear(this.toolBar)
+    this.closePopover()
 
-    const available: Tool[] =
-      this.entry.kind === 'pdf'
-        ? ['lesen', 'markieren', 'unterstreichen', 'durchstreichen', 'notiz', 'stift', 'radierer', 'textfeld', 'bearbeiten', 'abdecken']
-        : this.entry.kind === 'image'
-          ? ['lesen', 'notiz', 'stift', 'radierer', 'textfeld', 'abdecken']
-          : ['lesen', 'markieren', 'unterstreichen', 'durchstreichen']
+    const active = this.tools.current
+    const activeGroup = groupOf(active, this.groups)
 
-    for (const tool of available) {
-      if (tool === 'stift') this.toolBar.appendChild(h('span.divider'))
-      this.toolBar.appendChild(
-        h('button.icon-button', {
+    for (const group of this.groups) {
+      const isActive = group === activeGroup
+      const button = h(
+        'button.tool-group',
+        {
           type: 'button',
-          title: TOOL_LABEL[tool],
-          'aria-label': TOOL_LABEL[tool],
-          'aria-pressed': String(this.tools.current === tool),
-          html: icon(TOOL_ICON[tool]),
-          onclick: () => this.tools.toggle(tool),
-        }),
+          'aria-pressed': String(isActive),
+          'aria-label': group.label,
+          title: group.members.length > 1 ? `${group.label} — tippen, dann erneut für Varianten` : group.label,
+          onclick: () => this.pickGroup(group, button),
+        },
+        h('span.glyph', { html: icon(group.icon, 21) }),
+        h('span.name', {}, group.label),
+        // The colour the group would use, so it never has to be guessed.
+        isActive && group.id !== 'lesen'
+          ? h('span.ink', { style: `background:${this.colorFor(active)}` })
+          : null,
+        group.members.length > 1 ? h('span.more', { html: icon('down', 11) }) : null,
       )
+      this.toolBar.appendChild(button)
     }
+
+    this.renderToolContext()
+  }
+
+  /**
+   * A group button does one of two things.
+   *
+   * Tapping an inactive group activates it — with the member last used, so
+   * someone who underlines rather than highlights gets their tool back in one
+   * tap. Tapping the group that is already active opens its panel, where the
+   * variants and the colours live.
+   */
+  private pickGroup(group: ToolGroup, button: HTMLElement): void {
+    if (groupOf(this.tools.current, this.groups) !== group) {
+      this.tools.set(this.tools.memberOf(group), group.id)
+      return
+    }
+    if (group.id === 'lesen') return
+    this.openGroupPanel(group, button)
+  }
+
+  /** The palette a tool draws from, and therefore the colour it would use. */
+  private colorFor(tool: Tool): string {
+    return ['markieren', 'unterstreichen', 'durchstreichen'].includes(tool)
+      ? this.tools.highlightColor
+      : this.tools.inkColor
+  }
+
+  private paletteFor(tool: Tool) {
+    return ['markieren', 'unterstreichen', 'durchstreichen'].includes(tool)
+      ? HIGHLIGHT_COLORS
+      : INK_COLORS
+  }
+
+  private colorName(tool: Tool): string {
+    const value = this.colorFor(tool)
+    return this.paletteFor(tool).find((entry) => entry.value === value)?.name ?? ''
+  }
+
+  /**
+   * The second row: the name of the active tool, its colours, its width.
+   *
+   * The name is written out because no icon carries "durchstreichen" versus
+   * "unterstreichen" on its own at 21 pixels — and because the colour needs a
+   * name too, for anyone who cannot tell the swatches apart.
+   */
+  private renderToolContext(): void {
+    clear(this.toolContext)
 
     const tool = this.tools.current
-    if (tool === 'lesen') return
+    const showing = tool !== 'lesen'
+    this.toolContext.classList.toggle('is-open', showing)
+    if (!showing) return
 
-    this.toolBar.appendChild(h('span.divider'))
+    const needsColor = tool !== 'radierer' && tool !== 'abdecken' && tool !== 'bearbeiten'
 
-    const usesHighlightPalette = ['markieren', 'unterstreichen', 'durchstreichen'].includes(tool)
-    if (tool !== 'radierer' && tool !== 'abdecken') {
-      const palette = usesHighlightPalette ? HIGHLIGHT_COLORS : INK_COLORS
-      const active = usesHighlightPalette ? this.tools.highlightColor : this.tools.inkColor
-      const swatches = h('div.swatches')
+    this.toolContext.appendChild(
+      h(
+        'span.what',
+        {},
+        TOOL_LABEL[tool],
+        needsColor ? h('span.sep', {}, '·') : null,
+        needsColor ? h('span.color-name', {}, this.colorName(tool)) : null,
+      ),
+    )
 
-      for (const entry of palette) {
-        swatches.appendChild(
-          h('button.swatch', {
-            type: 'button',
-            title: entry.name,
-            'aria-label': entry.name,
-            'aria-pressed': String(entry.value === active),
-            style: `background:${entry.value}`,
-            onclick: () =>
-              usesHighlightPalette
-                ? this.tools.setHighlightColor(entry.value)
-                : this.tools.setInkColor(entry.value),
-          }),
-        )
-      }
-      this.toolBar.appendChild(swatches)
-    }
+    if (needsColor) this.toolContext.appendChild(this.buildSwatches(tool))
 
     if (tool === 'stift' || tool === 'radierer') {
-      this.toolBar.appendChild(
-        h('input.slider', {
+      this.toolContext.appendChild(
+        h('input.slider.width', {
           type: 'range',
           min: '0.001',
           max: '0.012',
           step: '0.0005',
           value: String(this.tools.inkWidth),
-          style: 'width:110px;flex:none',
           title: 'Strichstärke',
           'aria-label': 'Strichstärke',
           oninput: (event: Event) =>
@@ -333,6 +396,112 @@ export class ReaderView implements ViewerHost {
         }),
       )
     }
+
+    this.toolContext.appendChild(
+      h('button.icon-button.close-tool', {
+        type: 'button',
+        title: 'Werkzeug ablegen',
+        'aria-label': 'Werkzeug ablegen',
+        html: icon('close', 17),
+        onclick: () => this.tools.set('lesen'),
+      }),
+    )
+  }
+
+  private buildSwatches(tool: Tool): HTMLElement {
+    const palette = this.paletteFor(tool)
+    const active = this.colorFor(tool)
+    const marksText = palette === HIGHLIGHT_COLORS
+
+    const swatches = h('div.swatches')
+    for (const entry of palette) {
+      swatches.appendChild(
+        h('button.swatch', {
+          type: 'button',
+          title: entry.name,
+          'aria-label': entry.name,
+          'aria-pressed': String(entry.value === active),
+          style: `background:${entry.value}`,
+          onclick: () =>
+            marksText
+              ? this.tools.setHighlightColor(entry.value)
+              : this.tools.setInkColor(entry.value),
+        }),
+      )
+    }
+    return swatches
+  }
+
+  /**
+   * The group panel: the variants of a group next to its colours.
+   *
+   * Anchored under the button rather than shown as a dialog — it is a choice,
+   * not a question, and a modal would put the document behind a scrim for the
+   * sake of picking a pen colour.
+   */
+  private openGroupPanel(group: ToolGroup, button: HTMLElement): void {
+    this.closePopover()
+
+    const panel = h('div.tool-popover', { role: 'menu' })
+
+    for (const member of group.members) {
+      panel.appendChild(
+        h(
+          'button.popover-item',
+          {
+            type: 'button',
+            'aria-pressed': String(member === this.tools.current),
+            onclick: () => {
+              this.tools.set(member, group.id)
+              this.closePopover()
+            },
+          },
+          h('span.glyph', { html: icon(TOOL_ICON[member], 18) }),
+          h('span', {}, TOOL_LABEL[member]),
+          member === this.tools.current ? h('span.tick', { html: icon('check', 16) }) : null,
+        ),
+      )
+    }
+
+    const member = this.tools.current
+    if (member !== 'radierer' && member !== 'abdecken' && member !== 'bearbeiten') {
+      panel.appendChild(h('span.popover-rule'))
+      panel.appendChild(this.buildSwatches(member))
+    }
+
+    const bar = this.toolBar.getBoundingClientRect()
+    const box = button.getBoundingClientRect()
+    panel.style.top = `${box.bottom - bar.top + 6}px`
+    panel.style.left = `${Math.max(4, box.left - bar.left)}px`
+
+    this.toolBar.appendChild(panel)
+    this.popover = panel
+
+    /*
+     * Closed by the next pointer that lands anywhere else.
+     *
+     * The listener is removed together with the panel, and that is not
+     * housekeeping: one left behind would fire on the next panel's own buttons,
+     * see a target it does not recognise, and shut the panel before the tap
+     * became a click — which made every group panel work exactly once.
+     */
+    const close = (event: Event) => {
+      if (panel.contains(event.target as Node) || button.contains(event.target as Node)) return
+      this.closePopover()
+    }
+    const attach = setTimeout(() => {
+      const detach = on(document, 'pointerdown', close)
+      this.closePopoverListener = detach
+    }, 0)
+
+    this.closePopoverListener = () => clearTimeout(attach)
+  }
+
+  private closePopover(): void {
+    this.closePopoverListener?.()
+    this.closePopoverListener = null
+    this.popover?.remove()
+    this.popover = null
   }
 
   private updateUndoButtons(): void {

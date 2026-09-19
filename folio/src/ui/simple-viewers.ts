@@ -15,6 +15,7 @@ import { CONTEXT_LENGTH, findQuote, offsetsOfRange, rangeFromOffsets, textOf as 
 import { sampleColors } from '@/pdf/sample'
 import type { Rect } from '@/lib/geometry'
 import { PageOverlay } from './overlay'
+import { GestureLayer, clamp, type GestureHost, type Point, type ZoomAnchor } from './gestures'
 import { openMarkEditor } from './mark-editor'
 import { icon } from './icons'
 
@@ -25,11 +26,13 @@ import type { SearchHit, Viewer, ViewerHost } from './viewer'
    Image
    ======================================================================== */
 
-export class ImageViewer implements Viewer {
+export class ImageViewer implements Viewer, GestureHost {
   readonly element: HTMLElement
 
   private readonly page: HTMLElement
   private readonly image: HTMLImageElement
+  private readonly stageElement: HTMLElement
+  private gestures: GestureLayer | null = null
   private overlay: PageOverlay | null = null
   private objectUrl: string | null = null
   /** Used to sample the colour under a redaction, like the PDF viewer does. */
@@ -40,7 +43,56 @@ export class ImageViewer implements Viewer {
   constructor(private readonly host: ViewerHost) {
     this.image = h('img', { alt: this.host.entry.name }) as HTMLImageElement
     this.page = h('div.page', { 'data-index': '0' }, this.image)
-    this.element = h('div.viewport', {}, h('div.image-stage', {}, this.page))
+    this.stageElement = h('div.image-stage', {}, this.page)
+    this.element = h('div.viewport', {}, this.stageElement)
+  }
+
+  /* — Gestures: the same two-finger pinch the PDF reader uses. ————— */
+
+  readonly minScale = 0.25
+  readonly maxScale = 6
+
+  get viewport(): HTMLElement {
+    return this.element
+  }
+
+  get stage(): HTMLElement {
+    return this.stageElement
+  }
+
+  currentScale(): number {
+    return this.zoom
+  }
+
+  anchorAt(clientX: number, clientY: number): ZoomAnchor | null {
+    const box = this.page.getBoundingClientRect()
+    if (!box.width || !box.height) return null
+    return {
+      page: 0,
+      u: (clientX - box.left) / box.width,
+      v: (clientY - box.top) / box.height,
+      clientX,
+      clientY,
+    }
+  }
+
+  commitZoom(scale: number, anchor: ZoomAnchor | null): void {
+    this.zoom = clamp(scale, this.minScale, this.maxScale)
+    this.layout()
+    if (!anchor) return
+
+    const box = this.page.getBoundingClientRect()
+    this.element.scrollLeft += box.left + anchor.u * box.width - anchor.clientX
+    this.element.scrollTop += box.top + anchor.v * box.height - anchor.clientY
+  }
+
+  cancelToolGesture(): void {
+    this.overlay?.cancelGesture()
+  }
+
+  onDoubleTap(point: Point): void {
+    const close = this.zoom >= 1.6
+    this.commitZoom(close ? 1 : 2.5, close ? null : this.anchorAt(point.x, point.y))
   }
 
   get count(): number {
@@ -62,10 +114,12 @@ export class ImageViewer implements Viewer {
     observer.observe(this.element)
     this.disposers.push(() => observer.disconnect())
 
+    this.gestures = new GestureLayer(this)
     this.overlay = new PageOverlay(this.page, 0, this.host.session, this.host.tools, {
       onEditMark: (mark) => void openMarkEditor(mark, this.host.session),
       onPlaceText: (box) => void this.addTextBox(box),
       sampleFill: (box) => this.sampleFill(box),
+      gesturesBlocked: () => this.gestures?.isPinching ?? false,
     })
     this.overlay.render()
 
@@ -134,6 +188,7 @@ export class ImageViewer implements Viewer {
   }
 
   toolsChanged(): void {
+    this.element.classList.toggle('is-tooling', this.host.tools.isActive)
     this.element.classList.toggle('is-drawing', this.host.tools.isDrawing)
     this.overlay?.syncCaptureSurface()
   }
@@ -154,6 +209,8 @@ export class ImageViewer implements Viewer {
   destroy(): void {
     for (const dispose of this.disposers) dispose()
     this.disposers = []
+    this.gestures?.destroy()
+    this.gestures = null
     this.overlay?.destroy()
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
     if (this.scratch) {

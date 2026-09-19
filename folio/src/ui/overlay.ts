@@ -39,11 +39,22 @@ export interface OverlayHooks {
   onPlaceText(box: Rect): void
   /** Colour to paint over page content with, sampled from the rendered page. */
   sampleFill(box: Rect): string
+  /**
+   * True while the page itself owns the gesture — a two-finger pinch.
+   *
+   * Asked before every stroke, and it has to be: the gesture layer listens on
+   * the viewport in the capture phase, so when a second finger lands it cancels
+   * the stroke in progress *before* this layer sees the same event and would
+   * cheerfully start another one.
+   */
+  gesturesBlocked(): boolean
 }
 
 export class PageOverlay {
   readonly markLayer: HTMLElement
   readonly inkLayer: HTMLCanvasElement
+  /** Bands shown while a marker drag is still in progress. */
+  private readonly previewLayer: HTMLElement
 
   private selectedId: string | null = null
   private disposers: (() => void)[] = []
@@ -60,16 +71,18 @@ export class PageOverlay {
     private readonly hooks: OverlayHooks,
   ) {
     this.markLayer = h('div.mark-layer')
+    this.previewLayer = h('div.preview-layer')
     this.inkLayer = h('canvas.ink-layer.is-off') as HTMLCanvasElement
 
     this.page.appendChild(this.markLayer)
+    this.page.appendChild(this.previewLayer)
     this.page.appendChild(this.inkLayer)
 
     this.disposers.push(
       on(this.inkLayer, 'pointerdown', (event) => this.onPointerDown(event as PointerEvent)),
       on(this.inkLayer, 'pointermove', (event) => this.onPointerMove(event as PointerEvent)),
       on(this.inkLayer, 'pointerup', (event) => this.onPointerUp(event as PointerEvent)),
-      on(this.inkLayer, 'pointercancel', () => this.cancelStroke()),
+      on(this.inkLayer, 'pointercancel', () => this.cancelGesture()),
     )
   }
 
@@ -77,7 +90,24 @@ export class PageOverlay {
     for (const dispose of this.disposers) dispose()
     this.disposers = []
     this.markLayer.remove()
+    this.previewLayer.remove()
     this.inkLayer.remove()
+  }
+
+  /**
+   * Shows what a marker drag would produce, without storing anything.
+   *
+   * Drawn into its own layer rather than as provisional marks: a preview must
+   * never reach the undo stack or the notes list, and keeping it out of the
+   * mark layer means `render()` can run at any moment without wiping it.
+   */
+  preview(rects: readonly Rect[], color: string): void {
+    this.previewLayer.replaceChildren()
+    for (const rect of rects) {
+      this.previewLayer.appendChild(
+        h('div.preview-band', { style: `${this.place(rect)};background:${color}` }),
+      )
+    }
   }
 
   select(id: string | null): void {
@@ -284,6 +314,8 @@ export class PageOverlay {
   }
 
   private onPointerDown(event: PointerEvent): void {
+    if (this.hooks.gesturesBlocked()) return
+
     const tool = this.tools.current
     const point = this.pointOf(event)
 
@@ -365,7 +397,8 @@ export class PageOverlay {
     else this.hooks.onPlaceText(box)
   }
 
-  private cancelStroke(): void {
+  /** Abandons whatever is being drawn — a second finger started a pinch. */
+  cancelGesture(): void {
     this.drawing = false
     this.stroke = []
     this.clearCapture()

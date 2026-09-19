@@ -49,6 +49,50 @@ Betriebssystem übergeben („Öffnen mit Folio“).
 
 Die Leseposition wird gemerkt, der Bildschirm kann auf Wunsch anbleiben.
 
+### Bedienung mit dem Finger
+
+Eine Regel, überall dieselbe: **ein Finger gehört dem Werkzeug, zwei Finger
+gehören der Seite.**
+
+| Geste | Beim Lesen | Mit einem Werkzeug in der Hand |
+| --- | --- | --- |
+| ein Finger wischen | blättern | markieren, zeichnen, aufziehen |
+| zwei Finger auseinander | zoomen | zoomen |
+| zwei Finger schieben | verschieben | verschieben |
+| Doppeltipp | heranholen bzw. zurück auf Seitenbreite | dito |
+
+Beim Zoomen folgt die Seite während der Geste flüssig den Fingern und wird
+danach einmal scharf neu gerendert — dabei bleibt der Punkt zwischen den
+Fingern stehen, sodass man beim Vergrößern nicht die Stelle verliert. Auf
+Seitenbreite ist eine A4-Seite auf einem 360-Pixel-Display etwa 42 % groß;
+deshalb rechnet der Doppeltipp relativ zur Seitenbreite und nicht gegen einen
+festen Zoomwert.
+
+Kommt beim Zeichnen ein zweiter Finger dazu, wird der angefangene Strich
+verworfen statt mit einem Ausrutscher beendet.
+
+### Warum Markieren eine Wischgeste ist
+
+Weil Android sonst zwei Menüs zeigt. Sobald eine Seite eine native Textauswahl
+hält, legt das System seine eigene Leiste darüber — kopieren, teilen,
+übersetzen. Eine Web-Seite kann die Auswahl verhindern, aber sie kann nicht die
+Auswahl behalten und die Leiste verbergen. Wer über die Browserauswahl
+markiert, bekommt also immer beides gleichzeitig.
+
+Folio trennt die Fälle deshalb:
+
+* **Beim Lesen** bleibt die native Auswahl unverändert. Sie ist vertraut, und
+  Kopieren, Teilen und Übersetzen kommen kostenlos mit. Folios eigenes
+  Auswahlmenü erscheint hier nur auf Geräten mit Maus.
+* **Mit einem Markierwerkzeug** ist die Auswahl auf der Textebene abgeschaltet.
+  Folio nimmt die Geste selbst: der Textcursor unter dem Finger am Anfang und
+  der unter ihm jetzt ergeben einen Bereich, der beim Wischen als Vorschau
+  mitwächst und beim Loslassen zur Markierung wird.
+
+Kein Systemmenü, kein zweites Menü, und Markieren ist ein Strich über die
+Wörter statt erst auswählen, dann wählen — die Bewegung, die man mit einem
+echten Textmarker ohnehin macht.
+
 ### Kommentieren
 
 | Werkzeug | PDF | Bild | EPUB / Text |
@@ -59,6 +103,17 @@ Die Leseposition wird gemerkt, der Bildschirm kann auf Wunsch anbleiben.
 | Freihand-Stift und Radierer | ✓ | ✓ | — |
 | Textfeld einfügen | ✓ | ✓ | — |
 | Abdecken | ✓ | ✓ | — |
+
+Die Leiste zeigt fünf Gruppen — **Lesen · Markieren · Stift · Notiz · Mehr** —
+statt zehn Einzelknöpfe. Ein Tipp aktiviert das zuletzt benutzte Werkzeug der
+Gruppe, ein zweiter öffnet ihr Feld mit den Varianten und den Farben. Darunter
+steht, was gerade in der Hand liegt, ausgeschrieben und mit Farbnamen
+(„Markieren · Gelb“), samt Farbfeldern und Strichstärke.
+
+Das ist kein Geschmack, sondern Platz: zehn Knöpfe plus Farbreihe waren rund
+560 px breit, ein Handy ist 360 px — die Farben lagen hinter einer
+Scrollstrecke. Fünf Gruppen passen mit Luft, und die Farbe des aktiven
+Werkzeugs ist als Streifen unter seinem Symbol immer sichtbar.
 
 Fünf Marker- und fünf Stiftfarben, einstellbare Strichstärke, Rückgängig und
 Wiederholen (auch per `Strg`/`Cmd`+`Z`).
@@ -144,7 +199,7 @@ mit mehreren absolut positionierten Ebenen darüber, deren Geometrie bei jedem
 Zoom neu gerechnet wird — dabei wäre ein virtuelles DOM im Weg, und der Rest der
 App ist klein genug, dass sich eines nicht lohnt.
 
-### Zwei Dinge, die leicht kaputtgehen
+### Drei Dinge, die leicht kaputtgehen
 
 **Die Textebene.** pdf.js zeichnet die Seite als Bild und legt für jeden
 Textlauf ein durchsichtiges Element darüber. Die genaue Größe dieser Elemente
@@ -153,6 +208,14 @@ kommt aus CSS-Variablen, die pdf.js setzt (`--total-scale-factor`,
 `styles/app.css`. Fehlen sie, sitzt die unsichtbare Schrift nicht auf der
 sichtbaren: Markierungen landen neben dem Satz, und der Texteditor bietet ein
 Feld an, das nicht zur Zeile passt.
+
+**Die Gestentrennung.** `ui/gestures.ts` hört auf dem Viewport in der
+*Capture*-Phase, die Werkzeuge hören weiter unten am Ziel. Diese Reihenfolge ist
+Absicht: nur so kann ein zweiter Finger den laufenden Strich abbrechen, bevor
+die Werkzeugschicht dasselbe Ereignis sieht. Sie muss dann aber auch
+stillhalten — dafür fragen `ui/overlay.ts` und `ui/text-drag.ts` vor jeder Geste
+`gesturesBlocked()`. Fehlt diese Abfrage, fängt der zweite Finger sofort einen
+neuen Strich an, während die Seite zoomt.
 
 **Die Seitenplatzierung.** Marken werden in normalisierten Koordinaten der
 *angezeigten* Seite gespeichert (0…1, Ursprung oben links). Eine PDF-Seite hat
@@ -189,7 +252,8 @@ Android der Normalfall.
 Dateierkennung, Formatierung, Bibliothekssuche und -sortierung, Geometrie und
 Strichvereinfachung, Seitenplatzierung für alle vier Drehungen, die Suche nach
 der passenden Kompressionsstufe, WinAnsi-Faltung und Zeilenumbruch,
-Seitenbereiche, Textverankerung und der Notizen-Export.
+Seitenbereiche, Textverankerung, den Notizen-Export sowie die Pinch-Arithmetik
+und die Werkzeuggruppen.
 
 Die Oberfläche selbst — Rendern, Auswählen, Zeichnen, Exportieren — wird von
 Hand im Browser geprüft; dafür gibt es keine Abhängigkeit im Repository.
