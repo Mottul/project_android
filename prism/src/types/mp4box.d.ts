@@ -11,6 +11,12 @@ declare module 'mp4box' {
     height: number
   }
 
+  export interface MP4AudioInfo {
+    sample_rate: number
+    channel_count: number
+    sample_size: number
+  }
+
   export interface MP4Track {
     id: number
     codec: string
@@ -20,6 +26,7 @@ declare module 'mp4box' {
     track_width?: number
     track_height?: number
     video?: MP4VideoInfo
+    audio?: MP4AudioInfo
   }
 
   export interface MP4Info {
@@ -37,7 +44,7 @@ declare module 'mp4box' {
     is_sync: boolean
   }
 
-  /** Re-serialisable codec configuration box (avcC, hvcC, vpcC, av1C). */
+  /** Re-serialisable codec configuration box (avcC, esds, dOps, …). */
   export interface MP4ConfigBox {
     write(stream: DataStream): void
   }
@@ -47,10 +54,20 @@ declare module 'mp4box' {
     hvcC?: MP4ConfigBox
     vpcC?: MP4ConfigBox
     av1C?: MP4ConfigBox
+    esds?: MP4ConfigBox
+    dOps?: MP4ConfigBox
+    dfLa?: MP4ConfigBox
+  }
+
+  export interface MP4EditListEntry {
+    segment_duration: number
+    /** Where in the media timeline this edit starts; -1 marks empty edits. */
+    media_time: number
   }
 
   export interface MP4Trak {
     mdia?: { minf?: { stbl?: { stsd?: { entries?: MP4SampleEntry[] } } } }
+    edts?: { elst?: { entries?: MP4EditListEntry[] } }
   }
 
   export interface MP4File {

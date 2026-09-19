@@ -3,7 +3,7 @@
 import { sanitizeFilename } from '@/lib/format-utils'
 import { baseNameOf } from '@/lib/formats'
 import {
-  encodeFrame,
+  compressTexture,
   estimateBytes,
   hapVariantFor,
   layoutMovie,
@@ -11,9 +11,15 @@ import {
   targetSize,
   textureByteLength,
   timebaseFor,
+  wrapTexture,
+  type HapVariantSpec,
+  type TextureOptions,
 } from '../hap/encode'
+import { GpuTextureCompressor, gpuModeFor, validateCompressor } from '../hap/gpu-dxt'
+import { decodeAudioTrack, NoUsableAudio } from '../hap/audio'
+import type { AudioPayload } from '../hap/encode'
 import { openFrameSource, UnsupportedSource, type FrameSource } from '../hap/frame-source'
-import type { WorkerRequest, WorkerResponse } from '../types'
+import type { OutputSettings, WorkerRequest, WorkerResponse } from '../types'
 
 /**
  * The HAP encoder.
@@ -47,6 +53,63 @@ const aborts = new Map<string, AbortController>()
 interface Canvas {
   canvas: OffscreenCanvas
   ctx: OffscreenCanvasRenderingContext2D
+}
+
+/**
+ * Whatever turns the picture currently on the canvas into a texture.
+ *
+ * Both implementations read the canvas rather than taking pixels, which is
+ * what lets the GPU path keep the frame on the card from end to end — and what
+ * lets either of them compress lazily, only for the output slots a frame
+ * actually fills.
+ */
+interface TextureCompressor {
+  readonly label: string
+  compress(canvas: Canvas, width: number, height: number, out: Uint8Array): Promise<void>
+}
+
+function cpuCompressor(variant: HapVariantSpec): TextureCompressor {
+  return {
+    label: 'CPU',
+    async compress(canvas, width, height, out) {
+      const pixels = canvas.ctx.getImageData(0, 0, width, height).data
+      compressTexture(pixels, width, height, variant, out)
+    },
+  }
+}
+
+function gpuCompressor(gpu: GpuTextureCompressor, variant: HapVariantSpec): TextureCompressor {
+  const mode = gpuModeFor(variant)
+  return {
+    label: `GPU · ${gpu.label}`,
+    compress: (canvas, width, height, out) =>
+      gpu.compress(canvas.canvas, width, height, mode, variant.blockBytes, out),
+  }
+}
+
+/**
+ * One device per worker, brought up on the first job that wants it.
+ *
+ * `null` means "tried and there is none"; `undefined` means "not tried yet".
+ * The distinction matters — probing for an adapter is slow enough that doing
+ * it once per frame, or even once per job, would be noticeable.
+ */
+let sharedGpu: GpuTextureCompressor | null | undefined
+
+async function compressorFor(variant: HapVariantSpec): Promise<TextureCompressor> {
+  if (sharedGpu === undefined) {
+    sharedGpu = await GpuTextureCompressor.create()
+    if (sharedGpu) {
+      // A card that disagrees with the CPU compressor writes HAP files that
+      // play as garbage rather than failing, so it does not get a second try.
+      const agrees = await validateCompressor(sharedGpu, (w, h) => new OffscreenCanvas(w, h))
+      if (!agrees) {
+        sharedGpu.destroy()
+        sharedGpu = null
+      }
+    }
+  }
+  return sharedGpu ? gpuCompressor(sharedGpu, variant) : cpuCompressor(variant)
 }
 
 function makeCanvas(width: number, height: number): Canvas {
@@ -117,6 +180,44 @@ function drawFrame(
   ctx.drawImage(frame, 0, 0, width, height)
 }
 
+/**
+ * Decode the source's audio to PCM, or explain in a warning why there is none.
+ *
+ * Audio never fails a job. Someone who has waited twenty minutes for a
+ * two-gigabyte texture file should not lose it because the soundtrack used a
+ * codec this browser happens not to have.
+ */
+async function decodeAudio(
+  id: string,
+  source: FrameSource,
+  v: OutputSettings['video'],
+  signal: AbortSignal,
+): Promise<AudioPayload | null> {
+  if (v.stripAudio || v.audioCodec === 'none') return null
+  if (!source.audio) return null
+
+  post({ id, type: 'progress', progress: null, stage: 'Tonspur dekodieren' })
+
+  try {
+    const decoded = await decodeAudioTrack(source.audio.mp4, source.audio.track, signal)
+    return {
+      info: {
+        sampleRate: decoded.sampleRate,
+        channels: decoded.channels,
+        frameCount: decoded.frameCount,
+        byteLength: decoded.byteLength,
+      },
+      parts: decoded.chunks,
+    }
+  } catch (err) {
+    if (err instanceof NoUsableAudio) {
+      post({ id, type: 'warning', message: `${err.message} Die Datei wird ohne Ton geschrieben.` })
+      return null
+    }
+    throw err
+  }
+}
+
 async function convert(req: WorkerRequest) {
   const started = performance.now()
   const { id, file, settings } = req
@@ -163,7 +264,8 @@ async function convert(req: WorkerRequest) {
 
     const canvas = makeCanvas(width, height)
     const scratch = new Uint8Array(textureByteLength(variant, width, height))
-    const options = {
+    const compressor = await compressorFor(variant)
+    const options: TextureOptions = {
       variant,
       chunks: Math.max(1, Math.min(64, Math.round(v.hapChunks))),
       // Snappy on top of DXT wins around a tenth of the size for a small
@@ -190,7 +292,13 @@ async function convert(req: WorkerRequest) {
      * settled once the following frame's timestamp is known.
      */
     const grid = new OutputGrid(frameInterval, MAX_REPEATS)
-    let held: Uint8ClampedArray | null = null
+    /*
+     * The canvas itself is the held frame. Nothing is copied out of it until an
+     * output slot needs compressing, which is what keeps the GPU path free of
+     * a readback and saves the CPU path a getImageData on every frame that the
+     * frame-rate conversion drops anyway.
+     */
+    let holding = false
     let heldEncoded: Blob | null = null
     let heldSize = 0
     let heldUntil = 0
@@ -201,12 +309,13 @@ async function convert(req: WorkerRequest) {
     // duration of their own.
     const sourceInterval = 1e6 / (source.info.fps > 0 ? source.info.fps : fps)
 
-    const emit = (slots: number) => {
-      if (slots <= 0 || held === null) return
+    const emit = async (slots: number) => {
+      if (slots <= 0 || !holding) return
       // The same Blob is referenced again when a slot repeats, so a held frame
       // is compressed once and stored once however long it stays on screen.
       if (heldEncoded === null) {
-        const bytes = encodeFrame(held, width, height, options, scratch)
+        await compressor.compress(canvas, width, height, scratch)
+        const bytes = wrapTexture(scratch, options)
         heldSize = bytes.length
         heldEncoded = new Blob([bytes])
       }
@@ -224,10 +333,11 @@ async function convert(req: WorkerRequest) {
       decoded += 1
       const timestamp = frame.timestamp ?? decoded * frameInterval
 
-      emit(grid.slotsBefore(timestamp))
+      // Compress what is still on the canvas before it is painted over.
+      await emit(grid.slotsBefore(timestamp))
 
       drawFrame(canvas, frame, width, height, v.fit, variant.alpha)
-      held = canvas.ctx.getImageData(0, 0, width, height).data
+      holding = true
       heldEncoded = null
       // `||` rather than `??`: a zero duration is as useless as a missing one.
       heldUntil = timestamp + (frame.duration || sourceInterval)
@@ -246,20 +356,28 @@ async function convert(req: WorkerRequest) {
     }
 
     if (controller.signal.aborted) return
-    emit(grid.slotsUntil(heldUntil))
+    await emit(grid.slotsUntil(heldUntil))
     if (frames.length === 0) throw new Error('Aus dieser Datei kam kein einziges Bild an.')
+
+    const audio = await decodeAudio(id, source, v, controller.signal)
+    if (controller.signal.aborted) return
 
     post({ id, type: 'progress', progress: 0.995, stage: 'Container schreiben' })
 
-    const layout = layoutMovie(frames, sizes, {
-      variant: variant.fourcc,
-      width,
-      height,
-      timescale,
-      sampleDelta,
-      compressorName: variant.compressorName,
-      depth: variant.depth,
-    })
+    const layout = layoutMovie(
+      frames,
+      sizes,
+      {
+        variant: variant.fourcc,
+        width,
+        height,
+        timescale,
+        sampleDelta,
+        compressorName: variant.compressorName,
+        depth: variant.depth,
+      },
+      audio,
+    )
 
     const blob = new Blob(layout.parts, { type: 'video/quicktime' })
     const stem = sanitizeFilename(baseNameOf(file.name)) || 'prism_output'
@@ -270,7 +388,9 @@ async function convert(req: WorkerRequest) {
       blob,
       filename: `${stem}.mov`,
       mime: 'video/quicktime',
-      engine: `hap (${variant.label})`,
+      engine: `hap (${[variant.label, compressor.label, audio ? 'PCM' : null]
+        .filter(Boolean)
+        .join(' · ')})`,
       durationMs: performance.now() - started,
     })
   } finally {

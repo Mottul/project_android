@@ -2,7 +2,14 @@ import { RESOLUTION_HEIGHT } from '../ffmpeg-args'
 import type { VideoSettings } from '../types'
 import { blocksHigh, blocksWide, compressDXT1, compressDXT5, rgbaToYCoCg } from './dxt'
 import { encodeHapFrame, type HapTextureFormat } from './hap-frame'
-import { buildFtyp, buildMdatHeader, buildMoov, type HapVariant, type MovTrackInfo } from './mov'
+import {
+  buildFtyp,
+  buildMdatHeader,
+  buildMoov,
+  type HapVariant,
+  type MovAudioInfo,
+  type MovTrackInfo,
+} from './mov'
 import { snappyCompress } from './snappy'
 
 /**
@@ -112,11 +119,44 @@ export function textureByteLength(variant: HapVariantSpec, width: number, height
 }
 
 /**
- * Compress one frame of RGBA pixels into the bytes of a HAP sample.
+ * Compress RGBA pixels into a texture, in place where the variant allows it.
  *
- * `rgba` is modified in place for HAP Q — the colour transform has no reason to
- * allocate a second full-resolution buffer per frame.
+ * `rgba` is modified for HAP Q — the colour transform has no reason to allocate
+ * a second full-resolution buffer per frame.
  */
+export function compressTexture(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  variant: HapVariantSpec,
+  out: Uint8Array,
+): void {
+  switch (variant.texture) {
+    case 'RGB_DXT1':
+      compressDXT1(rgba, width, height, out)
+      break
+    case 'RGBA_DXT5':
+      compressDXT5(rgba, width, height, out)
+      break
+    case 'YCoCg_DXT5':
+      rgbaToYCoCg(rgba)
+      compressDXT5(rgba, width, height, out)
+      break
+  }
+}
+
+/** Wrap an already-compressed texture in the sections of a HAP sample. */
+export function wrapTexture(texture: Uint8Array, options: TextureOptions): Uint8Array<ArrayBuffer> {
+  return encodeHapFrame(texture, {
+    format: options.variant.texture,
+    chunks: options.chunks,
+    blockBytes: options.variant.blockBytes,
+    compress: options.compress,
+    compressor: snappyCompress,
+  })
+}
+
+/** Compress and wrap in one step. */
 export function encodeFrame(
   rgba: Uint8ClampedArray | Uint8Array,
   width: number,
@@ -124,28 +164,8 @@ export function encodeFrame(
   options: TextureOptions,
   scratch: Uint8Array,
 ): Uint8Array<ArrayBuffer> {
-  const { variant } = options
-
-  switch (variant.texture) {
-    case 'RGB_DXT1':
-      compressDXT1(rgba, width, height, scratch)
-      break
-    case 'RGBA_DXT5':
-      compressDXT5(rgba, width, height, scratch)
-      break
-    case 'YCoCg_DXT5':
-      rgbaToYCoCg(rgba)
-      compressDXT5(rgba, width, height, scratch)
-      break
-  }
-
-  return encodeHapFrame(scratch, {
-    format: variant.texture,
-    chunks: options.chunks,
-    blockBytes: variant.blockBytes,
-    compress: options.compress,
-    compressor: snappyCompress,
-  })
+  compressTexture(rgba, width, height, options.variant, scratch)
+  return wrapTexture(scratch, options)
 }
 
 export interface MovieLayout {
@@ -166,24 +186,40 @@ export interface MovieLayout {
  * handed to a Blob no longer has a readable length, and moving frames out of
  * the JS heap as they are produced is the whole point.
  */
+export interface AudioPayload {
+  info: MovAudioInfo
+  /** The PCM, in order, as parts a Blob can take. */
+  parts: BlobPart[]
+}
+
 export function layoutMovie(
   frames: BlobPart[],
   sizes: number[],
   info: Omit<MovTrackInfo, 'sampleSizes'>,
+  audio?: AudioPayload | null,
 ): MovieLayout {
   if (frames.length !== sizes.length) {
     throw new Error('Jedes Sample braucht genau eine Größe.')
   }
-  const payload = sizes.reduce((sum, size) => sum + size, 0)
+  const videoBytes = sizes.reduce((sum, size) => sum + size, 0)
+  const audioBytes = audio?.info.byteLength ?? 0
 
   const ftyp = buildFtyp()
-  const mdatHeader = buildMdatHeader(payload)
+  const mdatHeader = buildMdatHeader(videoBytes + audioBytes)
   const mdatStart = ftyp.length + mdatHeader.length
-  const moov = buildMoov({ ...info, sampleSizes: sizes }, mdatStart)
+  // The PCM follows the last frame, so its one chunk offset is known as soon
+  // as the video sizes are.
+  const audioStart = mdatStart + videoBytes
+  const moov = buildMoov(
+    { ...info, sampleSizes: sizes },
+    mdatStart,
+    audio?.info ?? null,
+    audioStart,
+  )
 
   return {
-    parts: [ftyp, mdatHeader, ...frames, moov],
-    totalBytes: mdatStart + payload + moov.length,
+    parts: [ftyp, mdatHeader, ...frames, ...(audio?.parts ?? []), moov],
+    totalBytes: audioStart + audioBytes + moov.length,
   }
 }
 

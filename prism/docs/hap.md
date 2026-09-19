@@ -45,30 +45,33 @@ dekodieren kann.
 ## Wie der Encoder gebaut ist
 
 ```
-Quelle ──mp4box──► Samples ──VideoDecoder──► VideoFrame
-                                                 │
-                                    OffscreenCanvas (Skalierung, Fit)
-                                                 │
-                                              RGBA
-                                                 │
-        ┌────────────────────────────────────────┤
-        │                                        │
-   HAP / HAP Alpha                            HAP Q
-   BC1 bzw. BC3                        RGB→YCoCg, dann BC3
-        └────────────────────┬───────────────────┘
-                             │
-                     HAP-Sections (Snappy, Chunks)
-                             │
-                      QuickTime-Index (moov)
+Quelle ─┬─mp4box──► Videosamples ──VideoDecoder──► VideoFrame
+        │                                             │
+        │                                OffscreenCanvas (Skalierung, Fit)
+        │                                             │
+        │                            ┌────────────────┴────────────────┐
+        │                            │                                 │
+        │                    GPU (WebGPU-Shader)              CPU (Fallback)
+        │                    Canvas → Textur → BC           getImageData → BC
+        │                            └────────────────┬────────────────┘
+        │                                             │
+        │                                  HAP-Sections (Snappy, Chunks)
+        │                                             │
+        └─mp4box──► Audiosamples ──AudioDecoder──► PCM 16 Bit
+                                                      │
+                                           QuickTime-Index (moov)
 ```
 
 | Datei | Aufgabe |
 |---|---|
-| [`hap/dxt.ts`](../src/engine/hap/dxt.ts) | BC1/BC3-Blockkompression, YCoCg-Transformation |
+| [`hap/dxt.ts`](../src/engine/hap/dxt.ts) | BC1/BC3-Blockkompression, YCoCg-Transformation (CPU) |
+| [`hap/dxt.wgsl`](../src/engine/hap/dxt.wgsl) | dieselbe Kompression als Compute-Shader |
+| [`hap/gpu-dxt.ts`](../src/engine/hap/gpu-dxt.ts) | WebGPU-Geräteverwaltung und Selbsttest |
 | [`hap/snappy.ts`](../src/engine/hap/snappy.ts) | Snappy-Kompressor (zweite Stufe) |
 | [`hap/hap-frame.ts`](../src/engine/hap/hap-frame.ts) | Sections, Chunk-Tabellen |
-| [`hap/mov.ts`](../src/engine/hap/mov.ts) | QuickTime-Schreiber |
-| [`hap/frame-source.ts`](../src/engine/hap/frame-source.ts) | Demux und Dekodierung |
+| [`hap/mov.ts`](../src/engine/hap/mov.ts) | QuickTime-Schreiber, Video- und Tonspur |
+| [`hap/frame-source.ts`](../src/engine/hap/frame-source.ts) | Demux und Videodekodierung |
+| [`hap/audio.ts`](../src/engine/hap/audio.ts) | Audiodekodierung nach PCM |
 | [`hap/encode.ts`](../src/engine/hap/encode.ts) | Varianten, Zielgröße, Bildraten-Raster |
 | [`workers/hap.worker.ts`](../src/engine/workers/hap.worker.ts) | die Schleife über alle Bilder |
 
@@ -84,6 +87,62 @@ HAP Q legt die Luminanz in den Alphakanal des DXT5-Blocks — dort gibt es acht
 interpolierte Stufen statt der groben 5:6:5-Farbrampe. Genau daher kommt der
 sichtbare Unterschied zu HAP bei doppelter Datenrate. Das Skalierungs-Byte
 bleibt 0, was der HAP-Shader als „Chroma unskaliert" liest.
+
+### Auf der GPU
+
+Blockkompression ist genau die Aufgabe, für die es Compute-Shader gibt: jeder
+4×4-Block ist unabhängig, und ein 1080p-Bild besteht aus rund 130.000 davon.
+[`dxt.wgsl`](../src/engine/hap/dxt.wgsl) ist eine bewusst wörtliche Übersetzung
+von `dxt.ts` — wo das TypeScript sich auf Ganzzahlsemantik verlässt (`>>`
+rundet ab, `Int32Array` schneidet beim Zuweisen ab), steht im Shader `floor()`
+statt `round()`, damit beide bei derselben Zahl landen.
+
+Die Bilder erreichen den Shader, ohne dass die CPU sie je sieht: Canvas →
+GPU-Textur → Storage-Buffer, beide Kopien auf der Karte. Zurück kommt nur das
+komprimierte Ergebnis, ein Sechstel der Größe.
+
+Der gefährliche Fall ist nicht eine Karte, die nicht läuft — es ist eine, die
+läuft und leicht falsche Bytes liefert. Das ergibt eine HAP-Datei, die auf dem
+Medienserver als Rauschen abspielt, statt hier zu scheitern. Deshalb beweist
+sich der GPU-Pfad erst gegen die CPU-Implementierung: ein 16×16-Referenzbild mit
+den drei Fällen, an denen sich ein korrekter Blockkompressor von einem
+plausiblen trennt — eine einfarbige Fläche, in der beide Endpunkte
+zusammenfallen, eine harte Kante innerhalb eines Blocks, und ein weicher
+Verlauf, in dem die Ausgleichsrechnung tatsächlich etwas bewegt. Weicht auch
+nur ein Byte ab, wird die GPU für die Sitzung stillgelegt und es läuft auf der
+CPU weiter.
+
+Denselben Vergleich führt [`tests/dxt-shader.test.ts`](../tests/dxt-shader.test.ts)
+bei jedem Build aus — dort gegen einen WGSL-Interpreter, weil WebGPU in keiner
+CI läuft. Der Test hat bereits beim ersten Durchlauf etwas gefunden, das kein
+Review gefunden hätte: `block` ist in WGSL ein reserviertes Wort.
+
+### Ton
+
+Medienserver wollen unkomprimierten Ton neben einer HAP-Spur. Der ganze Sinn
+des Formats ist, dass die Wiedergabe nichts kostet; ein Codec, der bei jedem
+Bild dekodiert werden muss, macht einen Teil davon wieder zunichte. Was die
+Quelle mitbringt, wird deshalb einmal dekodiert und als 16-Bit-PCM (`sowt`)
+geschrieben.
+
+Ton lässt einen Auftrag nie scheitern. Eine Spur, die sich nicht dekodieren
+lässt, kostet eine Warnung und eine stumme Datei — wer zwanzig Minuten auf eine
+Zwei-Gigabyte-Texturdatei gewartet hat, soll sie nicht wegen des Soundtracks
+verlieren.
+
+Zwei Fallstricke stecken im Vorlauf der Encoder:
+
+- **Opus** schreibt seinen Pre-Skip in den eigenen Identifikationsheader, und
+  der Decoder zieht ihn selbst ab. Ihn hier noch einmal abzuziehen schneidet
+  den Anfang des Programms ab — ein Fehler, den erst die Messung am erzeugten
+  PCM sichtbar gemacht hat.
+- **AAC** sagt seinem Decoder nichts und überlässt die Verzögerung der Edit
+  List des Containers. Die ist damit unsere.
+
+Das gesamte PCM steht in einem Stück hinter dem letzten Bild. Verschränken
+würde einem Player entgegenkommen, der die Datei linear liest — aber ein
+HAP-Bild ist megabytegroß und eine Sekunde Ton kilobytegroß, die Verschränkung
+wäre fast vollständig Video, und alles, was HAP liest, geht über den Index.
 
 ### Quellen, die der Browser nicht liest
 
@@ -109,11 +168,14 @@ letzte Bild warten muss.
   erzeugt Dateien, die auf dem Medienserver mitten in der Show abstürzen statt
   hier zu scheitern. Diese Variante bleibt deshalb auf dem ffmpeg-Pfad und
   verlangt weiterhin den erweiterten Core.
-- **Tempo.** Ein 1080p-Bild sind rund 130.000 Blöcke. Der Encoder läuft in
-  einem Worker und schafft je nach Maschine etwa 5–15 Bilder pro Sekunde. Für
-  einen Konverter in Ordnung, aber kein Echtzeitwerkzeug.
-- **Kein Ton.** Die Ausgabe ist eine reine Videospur. Medienserver spielen den
-  Ton ohnehin getrennt ab.
+- **Tempo ohne GPU.** Auf der CPU schafft der Encoder je nach Maschine etwa
+  5–15 Bilder pro Sekunde. Mit WebGPU ist die Blockkompression kein Flaschenhals
+  mehr; dann begrenzt der Decoder.
+- **Ton nur, was der Browser dekodiert.** AAC, MP3 und Opus ja, exotischere
+  Spuren nicht. Dann gibt es eine Warnung und eine stumme Datei.
+- **Kein Zwischenformat mit Ton.** Braucht das Video den ffmpeg-Umweg
+  (ProRes, Matroska), geht die Tonspur dabei verloren — das Zwischenformat
+  wird ohne Ton erzeugt.
 
 ## Wenn doch ein eigener Core gebaut werden soll
 
@@ -159,17 +221,14 @@ Danach kann `hap_q_alpha` in [`formats.ts`](../src/lib/formats.ts) von
 auch dann beim eigenen Encoder — der Umweg über einen 30-MB-Core lohnt sich
 für sie nicht.
 
-## Die schnellere Alternative
-
-DXT-Blockkompression liegt der GPU sehr gut. Über einen **WebGPU-Compute-Shader**
-wäre der Texturteil um ein Vielfaches schneller, und WebGPU steht ohnehin schon
-in der Capability-Erkennung. Der Rest der Pipeline — Demux, Dekodierung,
-Sections, Container — bliebe unverändert; auszutauschen wäre allein
-`dxt.ts`. Das ist die interessanteste offene Baustelle an dieser Stelle.
-
 ## Tests
 
 [`tests/hap.test.ts`](../tests/hap.test.ts) dekodiert alles wieder: DXT mit
 einem unabhängig geschriebenen Blockdecoder, Snappy mit einem eigenen
 Dekompressor, die Sections und den QuickTime-Index durch einen Box-Walker. Ein
 Encoder, den nur sein eigener Decoder lesen kann, ist nicht getestet.
+
+[`tests/dxt-shader.test.ts`](../tests/dxt-shader.test.ts) führt den
+Compute-Shader in einem WGSL-Interpreter aus und vergleicht Byte für Byte mit
+der CPU-Implementierung — in allen drei Modi, mit der Zeilen-Ausrichtung, die
+`copyTextureToBuffer` erzwingt, und mit blockunsauberen Maßen.
