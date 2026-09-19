@@ -136,9 +136,10 @@ textarea.field { resize: vertical; line-height: 1.5; }
   background: var(--surface);
 }
 .top-bar .title { font-size: 1rem; font-weight: 600; margin-right: 4px; }
-.top-bar .spacer { flex: 1; }
 
-.search-box { position: relative; flex: 1; max-width: 420px; }
+/* Fills everything between the title and the buttons — on a phone that gap is
+   all the room there is, and a capped width wasted a third of it. */
+.search-box { position: relative; flex: 1; min-width: 0; }
 .search-box .field { padding-left: 34px; }
 .search-box svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-faint); pointer-events: none; }
 
@@ -148,6 +149,17 @@ textarea.field { resize: vertical; line-height: 1.5; }
   border-bottom: 1px solid var(--line); background: var(--surface);
 }
 .filter-bar::-webkit-scrollbar { display: none; }
+
+/* Shown only when a folder needs its permission confirmed again. */
+.access-bar { display: none; flex: none; padding: 10px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.access-bar.is-open { display: block; }
+.access-notice {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 0.85rem; color: var(--text-dim);
+}
+.access-notice .grow { flex: 1; min-width: 0; }
+.access-notice svg { flex: none; color: var(--warn); }
+.access-notice .button { flex: none; }
 
 .library-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 12px 28px; }
 .library-body.is-empty { display: grid; place-items: center; }
@@ -409,7 +421,21 @@ textarea.field { resize: vertical; line-height: 1.5; }
 .viewport.is-tooling { touch-action: none; }
 .viewport.mode-doppel .pages { flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
 
-.pages { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 0 auto; }
+/*
+ * `width: max-content` is what keeps a zoomed page reachable.
+ *
+ * As a plain block the column would stay exactly as wide as the viewport, and a
+ * page wider than that would overflow to both sides because the items are
+ * centred — but a scroll container can only reach what overflows to the *right*.
+ * The left edge became unreachable, and the further one zoomed in the more of
+ * it was lost. Growing the column to its widest page moves all of the overflow
+ * to the scrollable side; `min-width: 100%` keeps it filling the viewport so
+ * narrower pages stay centred.
+ */
+.pages {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  width: max-content; min-width: 100%; margin: 0 auto;
+}
 
 .page {
   position: relative; flex: none;

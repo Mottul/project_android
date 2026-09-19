@@ -32,6 +32,7 @@ import { confirmDestructive, openDialog, toast } from './feedback'
 import { openSettings } from './settings-panel'
 import { openMarkEditor } from './mark-editor'
 import { explainAccessError } from './import'
+import { requestAccessFor } from './permissions'
 
 export interface ReaderCallbacks {
   onClose(): void
@@ -112,7 +113,7 @@ export class ReaderView implements ViewerHost {
 
   async load(): Promise<void> {
     try {
-      this.file = await loadDocFile(this.entry)
+      this.file = await this.openFile()
     } catch (error) {
       explainAccessError(error)
       this.callbacks.onClose()
@@ -161,6 +162,23 @@ export class ReaderView implements ViewerHost {
     this.renderRail()
     this.bindKeys()
     void this.keepAwake()
+  }
+
+  /**
+   * Opens the document, asking for the folder once if the permission lapsed.
+   *
+   * The tap that opened the document is the user gesture the browser needs, so
+   * the question can be answered right here instead of sending someone back to
+   * the library to find a menu.
+   */
+  private async openFile(): Promise<File> {
+    try {
+      return await loadDocFile(this.entry)
+    } catch (error) {
+      if ((error as Error).name !== 'PermissionError') throw error
+      if (!(await requestAccessFor(this.entry))) throw error
+      return loadDocFile(this.entry)
+    }
   }
 
   private createViewer(): Viewer {

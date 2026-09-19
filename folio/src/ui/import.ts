@@ -34,6 +34,8 @@ import {
   type ScannedFile,
 } from '@/lib/files'
 import { FILE_ACCEPT } from '@/lib/kinds'
+import { listSources } from '@/store/library'
+import { hasPermission } from '@/lib/files'
 import { closePdf, openPdf, readMeta, renderThumbnail } from '@/pdf/loader'
 import { readEpub } from '@/epub/parse'
 import { mimeOf } from '@/epub/render'
@@ -153,8 +155,17 @@ export class Enricher {
     const docs = await listDocs()
     const pending: DocEntry[] = []
 
+    // Folders whose permission lapsed over a restart are skipped whole. Asking
+    // is a user's decision, not a background task's, and trying anyway would
+    // produce one failure per document in the console.
+    const readable = new Set<string>()
+    for (const source of await listSources()) {
+      if (!source.handle || (await hasPermission(source.handle, 'read'))) readable.add(source.id)
+    }
+
     for (const doc of docs) {
       if (doc.missing) continue
+      if (!readable.has(doc.sourceId)) continue
       if (doc.kind !== 'pdf' && doc.kind !== 'epub' && doc.kind !== 'image') continue
       if (doc.title && (doc.pages || doc.kind !== 'pdf') && (await getThumb(doc.id))) continue
       pending.push(doc)
