@@ -60,27 +60,53 @@ export function toPageRect(client: DOMRect, pageBox: DOMRect): Rect {
   }
 }
 
+export interface MarkedText {
+  page: number
+  rects: Rect[]
+  text: string
+}
+
 /**
  * The rectangles covered by the current text selection, per page.
  *
  * A selection can run across several pages in continuous mode, so the result is
- * grouped by page element. Rectangles are merged per line — see
- * `mergeLineRects` for why that matters.
+ * grouped by page element.
  */
 export function rectsFromSelection(
   selection: Selection,
   pageFor: (node: Node) => { index: number; element: HTMLElement } | null,
-): { page: number; rects: Rect[]; text: string }[] {
-  const byPage = new Map<number, { element: HTMLElement; rects: Rect[]; text: string }>()
-
+): MarkedText[] {
+  const ranges: Range[] = []
   for (let i = 0; i < selection.rangeCount; i += 1) {
     const range = selection.getRangeAt(i)
-    if (range.collapsed) continue
+    if (!range.collapsed) ranges.push(range)
+  }
+  return rectsFromRanges(ranges, pageFor)
+}
 
+/**
+ * The same, for a range Folio built itself.
+ *
+ * On touch devices the marker tools do not go through the browser's selection
+ * at all — see ui/text-drag.ts — so the range arrives directly.
+ */
+export function rectsFromRange(
+  range: Range,
+  pageFor: (node: Node) => { index: number; element: HTMLElement } | null,
+): MarkedText[] {
+  return range.collapsed ? [] : rectsFromRanges([range], pageFor)
+}
+
+function rectsFromRanges(
+  ranges: readonly Range[],
+  pageFor: (node: Node) => { index: number; element: HTMLElement } | null,
+): MarkedText[] {
+  const byPage = new Map<number, { element: HTMLElement; rects: Rect[]; text: string }>()
+
+  for (const range of ranges) {
     // Walk the runs the range touches so each rectangle can be attributed to
     // the page it belongs to; `range.getClientRects()` alone loses that.
-    const runs = runsInRange(range)
-    for (const { node, subRange } of runs) {
+    for (const { node, subRange } of runsInRange(range)) {
       const page = pageFor(node)
       if (!page) continue
 
