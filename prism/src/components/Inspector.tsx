@@ -23,6 +23,7 @@ import { cx } from '@/lib/format-utils'
 import { useAppStore, selectStats } from '@/store/useAppStore'
 import type { QualityMode, ResolutionPreset } from '@/engine/types'
 import { activePresetLabel } from '@/lib/presets'
+import { hapVariantFor } from '@/engine/hap/encode'
 import { PresetGrid } from './PresetGrid'
 import {
   Button,
@@ -332,6 +333,7 @@ function VideoQuality() {
   const codec = VIDEO_CODECS[v.codec]
   const range = codec?.qualityRange ?? [14, 40, 23]
   const isCopy = v.codec === 'copy'
+  const hap = hapVariantFor(v.codec)
 
   if (isCopy) {
     return (
@@ -341,6 +343,36 @@ function VideoQuality() {
           Stream Copy kodiert nicht neu — Qualität und Auflösung bleiben exakt erhalten, und die
           Konvertierung dauert nur Sekunden.
         </p>
+      </Section>
+    )
+  }
+
+  // HAP has no quality dial at all: the texture format fixes the compression
+  // ratio, so the only decisions left are which variant and how large a frame.
+  if (hap) {
+    return (
+      <Section title="Qualität & Größe">
+        <p className="flex items-start gap-1.5 rounded-md bg-surface-2 p-2.5 text-[11.5px] leading-snug text-dim">
+          <Info size={12} className="mt-[1px] shrink-0 text-accent" />
+          {hap.label} komprimiert mit festem Faktor — es gibt keine Bitrate und keinen
+          Qualitätsregler. Die Dateigröße folgt allein aus Auflösung, Bildrate und Laufzeit.
+        </p>
+
+        <Field
+          label="Chunks"
+          value={String(v.hapChunks)}
+          hint="Teilt jedes Bild auf, damit der Medienserver es beim Abspielen über mehrere Kerne dekodieren kann. 4 ist der übliche Wert."
+        >
+          <Slider
+            min={1}
+            max={8}
+            value={v.hapChunks}
+            onChange={(hapChunks) => patchVideo({ hapChunks })}
+            marks={['1', '8']}
+          />
+        </Field>
+
+        <ResolutionControls />
       </Section>
     )
   }
@@ -666,6 +698,9 @@ function VideoAdvanced() {
   const caps = useAppStore((s) => s.caps)
   const v = settings.video
   const isHap = v.codec.startsWith('hap')
+  // The variants Prism encodes itself write a video-only QuickTime; the rest
+  // of this section is about an ffmpeg run that does not happen for them.
+  const isNativeHap = hapVariantFor(v.codec) !== null
   const isCopy = v.codec === 'copy'
 
   return (
@@ -703,7 +738,7 @@ function VideoAdvanced() {
         </Field>
       )}
 
-      {isHap && (
+      {isHap && !isNativeHap && (
         <Field
           label="HAP-Chunks"
           value={String(v.hapChunks)}
@@ -719,7 +754,15 @@ function VideoAdvanced() {
         </Field>
       )}
 
-      {!isCopy && (
+      {isNativeHap && (
+        <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-faint">
+          <Info size={12} className="mt-[1px] shrink-0" />
+          HAP schreibt Prism selbst, ohne ffmpeg. Die Ausgabe ist eine reine Videospur — Tonspur,
+          Zweipass und Faststart gibt es hier nicht.
+        </p>
+      )}
+
+      {!isCopy && !isNativeHap && (
         <Field label="Tonspur">
           <Select
             value={v.audioCodec}
@@ -737,28 +780,32 @@ function VideoAdvanced() {
         </Field>
       )}
 
-      <Toggle
-        checked={v.twoPass}
-        onChange={(twoPass) => patchVideo({ twoPass })}
-        label="Zweipass-Kodierung"
-        hint="Wirkt nur bei Bitraten- oder Zielgrößen-Modus. Verdoppelt die Rechenzeit, trifft die Zielgröße aber genau."
-      />
+      {!isNativeHap && (
+        <>
+          <Toggle
+            checked={v.twoPass}
+            onChange={(twoPass) => patchVideo({ twoPass })}
+            label="Zweipass-Kodierung"
+            hint="Wirkt nur bei Bitraten- oder Zielgrößen-Modus. Verdoppelt die Rechenzeit, trifft die Zielgröße aber genau."
+          />
 
-      <Toggle
-        checked={v.faststart}
-        onChange={(faststart) => patchVideo({ faststart })}
-        label="Faststart"
-        hint="Verschiebt den Index an den Dateianfang. Nötig, damit ein Video im Browser sofort startet."
-      />
+          <Toggle
+            checked={v.faststart}
+            onChange={(faststart) => patchVideo({ faststart })}
+            label="Faststart"
+            hint="Verschiebt den Index an den Dateianfang. Nötig, damit ein Video im Browser sofort startet."
+          />
 
-      <Toggle
-        checked={v.stripMetadata}
-        onChange={(stripMetadata) => patchVideo({ stripMetadata })}
-        label="Metadaten entfernen"
-        hint="Entfernt Kameradaten, Aufnahmeort und Software-Signaturen."
-      />
+          <Toggle
+            checked={v.stripMetadata}
+            onChange={(stripMetadata) => patchVideo({ stripMetadata })}
+            label="Metadaten entfernen"
+            hint="Entfernt Kameradaten, Aufnahmeort und Software-Signaturen."
+          />
+        </>
+      )}
 
-      {caps && !caps.sharedArrayBuffer && (
+      {caps && !caps.sharedArrayBuffer && !isNativeHap && (
         <p className="rounded-md bg-warn/10 p-2.5 text-[11px] leading-snug text-warn">
           Nur ein Thread aktiv. Für Mehrkern-Kodierung muss der Server die Header
           <code className="mx-1 font-mono text-[10.5px]">Cross-Origin-Opener-Policy</code>

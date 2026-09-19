@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildPlan, type BuildContext } from '@/engine/ffmpeg-args'
+import { buildIntermediatePlan, buildPlan, type BuildContext } from '@/engine/ffmpeg-args'
 import { DEFAULT_SETTINGS, type OutputSettings, type VideoSettings } from '@/engine/types'
 
 /**
@@ -150,20 +150,46 @@ describe('stream copy', () => {
   })
 })
 
-describe('HAP', () => {
+/*
+ * HAP, HAP Alpha and HAP Q are written by Prism's own encoder and never reach
+ * ffmpeg — see tests/hap.test.ts. What is left here is HAP Q Alpha, the one
+ * variant that still needs the extended core.
+ */
+describe('HAP Q Alpha via ffmpeg', () => {
   it('selects the variant through -format and passes the chunk count', () => {
-    const plan = buildPlan(ctx({ format: 'mov', codec: 'hap_q', hapChunks: 8 }))
+    const plan = buildPlan(ctx({ format: 'mov', codec: 'hap_q_alpha', hapChunks: 8 }))
     const args = plan.passes[0].args
 
     expect(plan.outputName).toBe('clip.mov')
     expect(flagValue(args, '-c:v')).toBe('hap')
-    expect(flagValue(args, '-format')).toBe('hap_q')
+    expect(flagValue(args, '-format')).toBe('hap_q_alpha')
     expect(flagValue(args, '-chunks')).toBe('8')
   })
 
   it('warns up front that the extended core is required', () => {
-    const plan = buildPlan(ctx({ format: 'mov', codec: 'hap_alpha' }))
+    const plan = buildPlan(ctx({ format: 'mov', codec: 'hap_q_alpha' }))
     expect(plan.warnings.join(' ')).toMatch(/erweiterten ffmpeg-Core/i)
+  })
+
+  it('no longer warns for the variants Prism encodes itself', () => {
+    for (const codec of ['hap', 'hap_alpha', 'hap_q']) {
+      const plan = buildPlan(ctx({ format: 'mov', codec }))
+      expect(plan.warnings.join(' ')).not.toMatch(/erweiterten ffmpeg-Core/i)
+    }
+  })
+})
+
+describe('HAP intermediate', () => {
+  it('produces a decodable MP4 with no audio and no metadata', () => {
+    const plan = buildIntermediatePlan('input_source')
+    const args = plan.passes[0].args
+
+    expect(plan.outputName).toBe('prism_hap_source.mp4')
+    expect(flagValue(args, '-c:v')).toBe('libx264')
+    expect(flagValue(args, '-crf')).toBe('12')
+    expect(flagValue(args, '-pix_fmt')).toBe('yuv420p')
+    expect(args).toContain('-an')
+    expect(flagValue(args, '-map_metadata')).toBe('-1')
   })
 })
 

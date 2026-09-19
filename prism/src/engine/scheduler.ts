@@ -3,8 +3,10 @@ import { baseNameOf } from '@/lib/formats'
 import { sanitizeFilename } from '@/lib/format-utils'
 import type { Capabilities } from '@/lib/capabilities'
 import ImageWorker from './workers/image.worker?worker'
-import { buildPlan } from './ffmpeg-args'
+import HapWorker from './workers/hap.worker?worker'
+import { buildIntermediatePlan, buildPlan } from './ffmpeg-args'
 import { FFmpegCancelled, FFmpegRunner, ffmpegRunner } from './ffmpeg-runner'
+import { hapVariantFor } from './hap/encode'
 import type { Job, JobResult, OutputSettings, WorkerRequest, WorkerResponse } from './types'
 
 /**
@@ -18,6 +20,12 @@ import type { Job, JobResult, OutputSettings, WorkerRequest, WorkerResponse } fr
  *     ffmpeg.wasm instance holding one wasm heap; running two would double
  *     peak memory for no throughput gain, since the core already uses every
  *     thread it was given.
+ *
+ * HAP is a third case sharing the media lane. It never touches ffmpeg: the
+ * texture compressor is ours, so the job goes to a dedicated worker. The one
+ * thing it cannot do is decode an exotic source — WebCodecs has no ProRes, and
+ * mp4box reads no Matroska — and for those the worker asks for a transcoded
+ * intermediate, which is the one place the two engines meet.
  */
 
 export interface SchedulerDeps {
@@ -96,6 +104,8 @@ export class Scheduler {
   /** Worker currently handling each in-flight image job, for cancellation. */
   private activeImageWorkers = new Map<string, Worker>()
   private activeMediaJobId: string | null = null
+  /** One HAP worker, reused: the media lane runs a single job at a time. */
+  private hapWorker: Worker | null = null
 
   constructor(private readonly deps: SchedulerDeps) {}
 
@@ -109,9 +119,13 @@ export class Scheduler {
   }
 
   /** Decide which engine owns a job, given its source and target format. */
-  private routeOf(job: Job, settings: OutputSettings): 'canvas' | 'ffmpeg' {
-    if (job.family !== 'image') return 'ffmpeg'
-    return CANVAS_FORMATS.has(settings.image.format) ? 'canvas' : 'ffmpeg'
+  private routeOf(job: Job, settings: OutputSettings): 'canvas' | 'ffmpeg' | 'hap' {
+    if (job.family === 'image') {
+      return CANVAS_FORMATS.has(settings.image.format) ? 'canvas' : 'ffmpeg'
+    }
+    // A still going to HAP would be a one-frame movie nobody asked for, so the
+    // native encoder only claims real video.
+    return hapVariantFor(settings.video.codec) ? 'hap' : 'ffmpeg'
   }
 
   enqueue(jobs: Job[]) {
@@ -139,6 +153,7 @@ export class Scheduler {
       this.pumpImages()
     }
     if (this.activeMediaJobId === id) {
+      this.hapWorker?.postMessage({ id, type: 'cancel' } satisfies WorkerRequest)
       void ffmpegRunner.cancel()
     }
     this.deps.onUpdate(id, { status: 'cancelled', progress: null })
@@ -155,6 +170,8 @@ export class Scheduler {
     this.cancelAll()
     this.imagePool?.destroy()
     this.imagePool = null
+    this.hapWorker?.terminate()
+    this.hapWorker = null
   }
 
   /* ---------------------------------------------------------------- image */
@@ -278,8 +295,187 @@ export class Scheduler {
   }
 
   private async runMediaJob(job: Job) {
-    const caps = this.deps.getCapabilities()
     const settings = this.deps.getSettings(job)
+    if (this.routeOf(job, settings) === 'hap') {
+      await this.runHapJob(job, settings, Date.now())
+      return
+    }
+    await this.runFFmpegJob(job, settings)
+  }
+
+  /* ------------------------------------------------------------------ hap */
+
+  private hap(): Worker {
+    if (!this.hapWorker) this.hapWorker = new HapWorker()
+    return this.hapWorker
+  }
+
+  /**
+   * Run a HAP job, transcoding the source first if the worker cannot read it.
+   *
+   * The intermediate is deliberately near-lossless H.264: it exists only so a
+   * hardware decoder can hand us pixels, and anything it throws away is gone
+   * from the texture too. It is also why the job says so in a warning — a
+   * quality loss the user did not choose has to be visible.
+   */
+  private async runHapJob(
+    job: Job,
+    settings: OutputSettings,
+    startedAt: number,
+    source?: File,
+  ) {
+    this.activeMediaJobId = job.id
+
+    this.deps.onUpdate(job.id, {
+      status: 'running',
+      progress: null,
+      startedAt,
+      stage: 'HAP vorbereiten',
+    })
+
+    try {
+      const outcome = await this.talkToHapWorker(job, settings, startedAt, source ?? job.file)
+
+      if (outcome.kind === 'done') {
+        this.finish(job, outcome.result)
+        return
+      }
+
+      if (source) {
+        // Already transcoded once; a second failure is a real one.
+        throw new Error(
+          `Auch das Zwischenformat ließ sich nicht dekodieren: ${outcome.reason}`,
+        )
+      }
+
+      this.deps.onUpdate(job.id, {
+        warning:
+          `${outcome.reason} Die Datei wird zuerst nach H.264 umgewandelt und dann ` +
+          `nach HAP kodiert. Das kostet einmal Qualität — ein verlustfreier Weg ` +
+          `führt hier nur über eine MP4- oder MOV-Quelle, die der Browser direkt liest.`,
+        stage: 'Zwischenformat erzeugen',
+      })
+
+      const intermediate = await this.transcodeForHap(job)
+      if (this.cancelled.has(job.id)) throw new FFmpegCancelled()
+      await this.runHapJob(job, settings, startedAt, intermediate)
+    } catch (err) {
+      if (err instanceof FFmpegCancelled || this.cancelled.has(job.id)) {
+        this.deps.onUpdate(job.id, { status: 'cancelled', progress: null })
+      } else {
+        this.deps.onUpdate(job.id, {
+          status: 'error',
+          progress: null,
+          error: (err as Error).message,
+          finishedAt: Date.now(),
+        })
+      }
+    }
+  }
+
+  private talkToHapWorker(
+    job: Job,
+    settings: OutputSettings,
+    startedAt: number,
+    file: File,
+  ): Promise<{ kind: 'done'; result: JobResult } | { kind: 'fallback'; reason: string }> {
+    const worker = this.hap()
+
+    return new Promise((resolve, reject) => {
+      const onMessage = (event: MessageEvent<WorkerResponse>) => {
+        const msg = event.data
+        if (msg.id !== job.id) return
+
+        switch (msg.type) {
+          case 'progress':
+            this.deps.onUpdate(job.id, {
+              progress: msg.progress,
+              stage: msg.stage,
+              etaMs: estimateEta(msg.progress, startedAt),
+            })
+            break
+          case 'warning':
+            this.deps.onUpdate(job.id, { warning: msg.message })
+            break
+          case 'fallback':
+            cleanup()
+            resolve({ kind: 'fallback', reason: msg.reason })
+            break
+          case 'done':
+            cleanup()
+            resolve({
+              kind: 'done',
+              result: {
+                blob: msg.blob,
+                filename: msg.filename,
+                bytes: msg.blob.size,
+                mime: msg.mime,
+                durationMs: msg.durationMs,
+                engine: msg.engine,
+              },
+            })
+            break
+          case 'error':
+            cleanup()
+            reject(new Error(msg.message))
+            break
+        }
+      }
+
+      const onError = (event: ErrorEvent) => {
+        cleanup()
+        // A crashed worker leaves no usable state; the next job gets a new one.
+        this.hapWorker?.terminate()
+        this.hapWorker = null
+        reject(new Error(event.message || 'Der HAP-Encoder ist abgestürzt.'))
+      }
+
+      const cleanup = () => {
+        worker.removeEventListener('message', onMessage)
+        worker.removeEventListener('error', onError)
+      }
+
+      worker.addEventListener('message', onMessage)
+      worker.addEventListener('error', onError)
+      worker.postMessage({
+        id: job.id,
+        type: 'convert',
+        file,
+        settings,
+        family: job.family,
+      } satisfies WorkerRequest)
+    })
+  }
+
+  /** Decode-only intermediate: whatever ffmpeg can read, as H.264 in MP4. */
+  private async transcodeForHap(job: Job): Promise<File> {
+    const caps = this.deps.getCapabilities()
+    await ffmpegRunner.load(Boolean(caps?.sharedArrayBuffer), this.deps.onLog)
+    if (this.cancelled.has(job.id)) throw new FFmpegCancelled()
+
+    const plan = buildIntermediatePlan(FFmpegRunner.inputPathFor(job.file))
+    for (const line of plan.commandLine.split('\n')) this.deps.onLog?.(`$ ${line}`)
+
+    const result = await ffmpegRunner.run(job.file, plan, {
+      onProgress: (progress) => {
+        if (this.cancelled.has(job.id)) return
+        // The intermediate is a means to an end, so it only owns the first
+        // fifth of the bar; the texture pass is the slow part.
+        this.deps.onUpdate(job.id, {
+          progress: progress === null ? null : progress * 0.2,
+          stage: 'Zwischenformat erzeugen',
+        })
+      },
+      onLog: this.deps.onLog,
+    })
+
+    return new File([result.blob], 'prism_intermediate.mp4', { type: 'video/mp4' })
+  }
+
+  /* --------------------------------------------------------------- ffmpeg */
+
+  private async runFFmpegJob(job: Job, settings: OutputSettings) {
+    const caps = this.deps.getCapabilities()
     this.activeMediaJobId = job.id
 
     this.deps.onUpdate(job.id, {

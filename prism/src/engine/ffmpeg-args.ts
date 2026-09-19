@@ -40,7 +40,8 @@ export interface BuildContext {
   audioOnly?: boolean
 }
 
-const HEIGHT_FOR: Record<string, number> = {
+/** Short-edge target for each named resolution preset. */
+export const RESOLUTION_HEIGHT: Record<string, number> = {
   '4320p': 4320,
   '2160p': 2160,
   '1440p': 1440,
@@ -101,7 +102,7 @@ function buildVideoFilters(ctx: BuildContext): string[] {
     }
     filters.push('setsar=1')
   } else if (v.resolution !== 'source') {
-    const target = HEIGHT_FOR[v.resolution]
+    const target = RESOLUTION_HEIGHT[v.resolution]
     // min(ih, target) so a 720p source is never upscaled to 1080p; -2 keeps the
     // aspect ratio and forces an even width.
     filters.push(`scale=-2:${esc(`min(ih,${target})`)}:flags=lanczos`)
@@ -440,4 +441,54 @@ function finalize(plan: FFmpegPlan): FFmpegPlan {
 
 function quoteIfNeeded(arg: string): string {
   return /[\s;|&<>()$`"']/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg
+}
+
+/**
+ * A decode-only stepping stone for the HAP encoder.
+ *
+ * WebCodecs has no ProRes or DNxHD decoder and mp4box reads no Matroska, so a
+ * source the HAP worker cannot open is first rewritten into the one thing every
+ * browser decodes in hardware. CRF 12 is chosen to be visually transparent
+ * rather than efficient: the file lives for one conversion and is thrown away,
+ * and whatever it discards is discarded from the texture as well.
+ *
+ * `yuv420p` is not a compromise here — the DXT compressor subsamples chroma far
+ * more aggressively than 4:2:0 already does.
+ */
+export function buildIntermediatePlan(inputName: string): FFmpegPlan {
+  const outputName = 'prism_hap_source.mp4'
+  return finalize({
+    passes: [
+      {
+        label: 'Zwischenformat erzeugen',
+        weight: 1,
+        args: [
+          '-hide_banner',
+          '-i',
+          inputName,
+          '-an',
+          '-sn',
+          '-dn',
+          '-map_metadata',
+          '-1',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '12',
+          '-pix_fmt',
+          'yuv420p',
+          '-movflags',
+          '+faststart',
+          outputName,
+        ],
+      },
+    ],
+    outputName,
+    mime: 'video/mp4',
+    scratch: [],
+    commandLine: '',
+    warnings: [],
+  })
 }

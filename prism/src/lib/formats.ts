@@ -124,31 +124,33 @@ export const VIDEO_CODECS: Record<string, CodecDef> = {
      HAP stores GPU texture blocks (BC1/BC3) instead of a normal video
      bitstream, so playback costs almost no CPU - which is why media servers
      and VJ tools want it. Encoding means running a DXT compressor per frame,
-     plus optional Snappy on the chunks.
+     plus Snappy on the chunks.
 
-     Not in any stock ffmpeg.wasm build: the core must be compiled with
-     --enable-encoder=hap --enable-libsnappy. See docs/hap.md. */
+     No stock ffmpeg.wasm build has the encoder, and adding it means compiling
+     a core against libsnappy. Prism writes these three itself instead: the
+     texture compressor and the QuickTime index are a few hundred lines, and
+     they run wherever WebCodecs can decode the source. See docs/hap.md. */
   hap: {
     id: 'hap',
     label: 'HAP',
     encoder: 'hap',
-    availability: 'requires-core',
+    availability: 'ready',
     note: 'BC1/DXT1. Kleinste Variante, kein Alphakanal.',
   },
   hap_alpha: {
     id: 'hap_alpha',
     label: 'HAP Alpha',
     encoder: 'hap',
-    availability: 'requires-core',
+    availability: 'ready',
     alpha: true,
-    note: 'BC3/DXT5 mit Alphakanal.',
+    note: 'BC3/DXT5 mit Alphakanal. Doppelte Datenrate gegenüber HAP.',
   },
   hap_q: {
     id: 'hap_q',
     label: 'HAP Q',
     encoder: 'hap',
-    availability: 'requires-core',
-    note: 'Scaled YCoCg DXT5. Deutlich bessere Qualität, ca. doppelte Datenrate.',
+    availability: 'ready',
+    note: 'YCoCg DXT5. Deutlich bessere Qualität, doppelte Datenrate.',
   },
   hap_q_alpha: {
     id: 'hap_q_alpha',
@@ -156,7 +158,7 @@ export const VIDEO_CODECS: Record<string, CodecDef> = {
     encoder: 'hap',
     availability: 'requires-core',
     alpha: true,
-    note: 'HAP Q plus separater Alphakanal.',
+    note: 'HAP Q plus separater Alphakanal — zwei Texturen pro Bild, dafür braucht es den erweiterten Core.',
   },
 
   gif: { id: 'gif', label: 'GIF', encoder: 'gif', availability: 'ready' },
