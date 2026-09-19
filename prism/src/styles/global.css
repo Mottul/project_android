@@ -5,6 +5,10 @@
    in-app toggle can override the system preference in both directions. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
+/* A phone held sideways has roughly 320-420px of height for everything. The
+   `short` variant is where decoration gets dropped so the controls still fit. */
+@custom-variant short (@media (max-height: 600px));
+
 /* ===========================================================================
    Base
    ======================================================================== */
@@ -19,6 +23,32 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* Mobile browsers resize the viewport as their toolbars slide away; `dvh`
+   follows that, `vh` does not and leaves the action bar under the chrome. */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
+/* The notch and the home indicator are kept clear once, at the root, so no
+   individual panel has to fight a padding utility over it. */
+#root {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.pad-safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.pad-safe-b {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 html {
@@ -59,23 +89,32 @@ output {
   border-radius: var(--r-xs);
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  color: inherit;
-}
+/* These have to sit in the base layer. Unlayered rules outrank every layered
+   utility, so an unlayered `background: none` on `button` silently beat
+   `bg-accent` and rendered every primary button — the one thing on the screen
+   that is supposed to be impossible to miss — as transparent text. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
 
-button {
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-}
+  button {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    /* No 300ms wait for a double-tap, and no grey flash on tap. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 
-button:disabled {
-  cursor: not-allowed;
+  button:disabled {
+    cursor: not-allowed;
+  }
 }
 
 /* ===========================================================================
@@ -221,6 +260,24 @@ button:disabled {
   100% { transform: translateX(320%); }
 }
 
+@keyframes prism-sheet-up {
+  from { transform: translateY(14px); opacity: 0.4; }
+  to   { transform: none; opacity: 1; }
+}
+
+@keyframes prism-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-sheet {
+  animation: prism-sheet-up var(--t-base) var(--ease-out) both;
+}
+
+.animate-fade {
+  animation: prism-fade var(--t-base) var(--ease) both;
+}
+
 .animate-rise {
   animation: prism-rise var(--t-slow) var(--ease-out) both;
 }
@@ -343,4 +400,34 @@ select.prism-select {
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 30px;
+}
+
+/* ===========================================================================
+   Touch
+   ======================================================================== */
+
+@media (pointer: coarse) {
+  /* Below 16px iOS zooms the whole page in when a field takes focus, and never
+     zooms back out. The controls grow to a thumb-sized target at the same time. */
+  select.prism-select,
+  input[type='number'],
+  input[type='text'] {
+    font-size: 16px;
+    min-height: 42px;
+  }
+
+  input[type='range'] {
+    height: 30px;
+  }
+
+  input[type='range']::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+    margin-top: -8.5px;
+  }
+
+  input[type='range']::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+  }
 }

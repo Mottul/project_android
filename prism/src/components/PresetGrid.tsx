@@ -31,13 +31,13 @@ export function PresetGrid() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {grouped.map(([group, presets]) => (
-        <div key={group} className="flex flex-col gap-2">
+        <div key={group} className="flex flex-col gap-1.5">
           <h4 className="text-[10.5px] font-semibold tracking-[0.07em] text-faint uppercase">
             {PRESET_GROUP_LABEL[group]}
           </h4>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-2">
             {presets.map((preset) => (
               <PresetCard
                 key={preset.id}
@@ -81,7 +81,7 @@ function PresetCard({
       onClick={onSelect}
       title={`${preset.hint}${slowWithoutHardware ? '\n\nHinweis: ohne Hardware-Encoder sehr langsam.' : ''}`}
       className={cx(
-        'group relative flex flex-col gap-1.5 rounded-md border p-2.5 text-left',
+        'group relative flex flex-col gap-1 rounded-md border px-2.5 py-2 text-left',
         'transition-all duration-200 [transition-timing-function:var(--ease-prism)]',
         active
           ? 'border-accent-line bg-accent-sunk shadow-sm'

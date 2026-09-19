@@ -232,6 +232,21 @@ Das Spektrum (Mint → Perlblau → Orchidee) ist kein Dekor: es ist gleichzeiti
 Logo, Fortschrittsbalken und die Farbkodierung der Dateifamilien. Identität und
 Informationsdesign sind dasselbe System.
 
+### Zwei Layouts
+
+Ab 1024 px Breite steht der Inspector als 384-px-Spalte rechts neben der
+Warteschlange. Darunter — also auf jedem Telefon — gibt es ihn nicht als
+Spalte, sondern als Sheet über der Warteschlange, geöffnet aus einer festen
+Aktionsleiste am unteren Rand: Datei hinzufügen, Einstellungen, Konvertieren.
+Gerendert wird immer nur eine der beiden Varianten.
+
+Die Höhe ist dabei die knappere Ressource als die Breite. Ein quer gehaltenes
+Telefon hat rund 390 px davon, deshalb gibt es die Variante `short`
+(`max-height: 600px`): Logo, Formathinweise und die Titelzeile des Sheets
+entfallen dort, die Kopfzeile schrumpft, und die Vorlagen sind ohnehin
+eingeklappt. Sicherheitsabstände für Notch und Home-Indicator sitzen einmal
+zentral auf `#root`.
+
 ---
 
 ## Tests

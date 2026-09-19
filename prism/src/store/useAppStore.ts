@@ -21,6 +21,10 @@ interface AppState {
   focusFamily: MediaFamily
   log: string[]
   showLog: boolean
+  /** Narrow layouts only: the settings sheet covering the queue. */
+  inspectorOpen: boolean
+  /** Whether the preset gallery is expanded. Remembered across sessions. */
+  presetsOpen: boolean
 
   init(): Promise<void>
   addFiles(files: File[]): void
@@ -46,6 +50,26 @@ interface AppState {
 
   toggleTheme(): void
   setShowLog(open: boolean): void
+  setInspectorOpen(open: boolean): void
+  setPresetsOpen(open: boolean): void
+}
+
+/** localStorage is unavailable in private mode on some browsers. */
+function readFlag(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw === null ? fallback : raw === '1'
+  } catch {
+    return fallback
+  }
+}
+
+function writeFlag(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    /* private mode */
+  }
 }
 
 /** Created once; the store only ever talks to this instance. */
@@ -90,6 +114,10 @@ export const useAppStore = create<AppState>((set, get) => {
     focusFamily: 'video',
     log: [],
     showLog: false,
+    inspectorOpen: false,
+    // Collapsed by default: thirty cards are a gallery, and the inspector has
+    // to fit on a phone before it gets to be a gallery.
+    presetsOpen: readFlag('prism.presetsOpen', false),
 
     async init() {
       const caps = await detectCapabilities()
@@ -344,6 +372,15 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setShowLog(open) {
       set({ showLog: open })
+    },
+
+    setInspectorOpen(open) {
+      set({ inspectorOpen: open })
+    },
+
+    setPresetsOpen(open) {
+      writeFlag('prism.presetsOpen', open)
+      set({ presetsOpen: open })
     },
   }
 })

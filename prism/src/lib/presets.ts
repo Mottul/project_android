@@ -560,6 +560,11 @@ export function presetById(id: string): Preset | undefined {
   return PRESETS.find((p) => p.id === id)
 }
 
+/** What to show in place of the preset gallery while it is collapsed. */
+export function activePresetLabel(id: string | null): string | null {
+  return id ? (presetById(id)?.label ?? null) : null
+}
+
 /** Merge a preset's patch into the current settings, leaving the rest alone. */
 export function applyPreset(settings: OutputSettings, preset: Preset): OutputSettings {
   return {

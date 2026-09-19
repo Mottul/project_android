@@ -14,7 +14,7 @@ export function JobQueue() {
 
   if (jobs.length === 0) {
     return (
-      <div className="flex flex-1 flex-col p-4">
+      <div className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
         <DropZone compact={false} />
       </div>
     )
@@ -22,15 +22,23 @@ export function JobQueue() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-3 px-4 pt-4 pb-3">
-        <h2 className="text-[13px] font-semibold text-text">
+      <div className="flex shrink-0 items-center gap-2 px-3 pt-3 pb-2 sm:gap-3 sm:px-4 sm:pt-4 sm:pb-3">
+        <h2 className="min-w-0 truncate text-[13px] font-semibold text-text">
           Warteschlange
+          {/* The counts live here as well as in the status bar, because the
+              status bar is not on screen on a phone. */}
           <span className="tnum ml-2 font-normal text-faint">
             {stats.total} {stats.total === 1 ? 'Datei' : 'Dateien'}
+            {stats.done > 0 && ` · ${stats.done} fertig`}
           </span>
+          {stats.failed > 0 && (
+            <span className="tnum ml-1.5 font-normal text-danger">
+              · {stats.failed} fehlgeschlagen
+            </span>
+          )}
         </h2>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {stats.done > 0 && (
             <Button
               size="sm"
@@ -47,7 +55,7 @@ export function JobQueue() {
         </div>
       </div>
 
-      <div className="scroll-area flex flex-1 flex-col gap-2 px-4 pb-4">
+      <div className="scroll-area flex flex-1 flex-col gap-2 px-3 pb-4 sm:px-4">
         <DropZone compact />
         {jobs.map((job) => (
           <JobCard key={job.id} job={job} />
