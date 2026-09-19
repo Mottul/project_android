@@ -414,23 +414,44 @@ export const PRESETS: Preset[] = [
     audio: { format: 'flac', codec: 'flac', mode: 'lossless', sampleRate: 0, channels: 0 },
   },
 
-  /* ------------------------------------------------------- Produktion --- */
+  /* ------------------------------------------------------- Produktion ---
+     The three HAP variants Prism encodes itself. They are ordered the way the
+     decision is actually made: how much data rate the playback system has to
+     spare, and whether the clip needs an alpha channel. */
   {
-    id: 'hap-q',
-    label: 'HAP Q · Medienserver',
-    hint: 'GPU-dekodiert in Resolume, TouchDesigner und vergleichbaren Systemen. Große Dateien, dafür nahezu keine CPU-Last beim Abspielen.',
+    id: 'hap',
+    label: 'HAP · Medienserver',
+    hint: 'Die Standardvariante: BC1-Texturen, kein Alphakanal, die kleinsten Dateien der Familie. Erste Wahl, wenn die Platte des Medienservers mitspielen muss.',
     group: 'pro',
     family: 'video',
     icon: 'Cpu',
-    spec: 'MOV · HAP Q · 4 Chunks',
-    requiresCore: true,
+    spec: 'MOV · HAP · 4 Chunks',
     video: {
       format: 'mov',
-      codec: 'hap_q',
-      audioCodec: 'pcm',
+      codec: 'hap',
+      audioCodec: 'none',
       mode: 'lossless',
       resolution: 'source',
       hapChunks: 4,
+      stripAudio: true,
+    },
+  },
+  {
+    id: 'hap-q',
+    label: 'HAP Q · beste Qualität',
+    hint: 'YCoCg-Texturen mit deutlich feinerem Farbverlauf als HAP, dafür die doppelte Datenrate. Für Flächen, Verläufe und alles, was groß projiziert wird.',
+    group: 'pro',
+    family: 'video',
+    icon: 'Gem',
+    spec: 'MOV · HAP Q · 4 Chunks',
+    video: {
+      format: 'mov',
+      codec: 'hap_q',
+      audioCodec: 'none',
+      mode: 'lossless',
+      resolution: 'source',
+      hapChunks: 4,
+      stripAudio: true,
     },
   },
   {
@@ -440,8 +461,7 @@ export const PRESETS: Preset[] = [
     group: 'pro',
     family: 'video',
     icon: 'Blend',
-    spec: 'MOV · HAP Alpha',
-    requiresCore: true,
+    spec: 'MOV · HAP Alpha · 4 Chunks',
     video: {
       format: 'mov',
       codec: 'hap_alpha',

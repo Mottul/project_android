@@ -239,8 +239,11 @@ export class FFmpegRunner {
     if (/Unknown encoder|Unrecognized option|Encoder .* not found/i.test(tail)) {
       const match = tail.match(/Unknown encoder '([^']+)'/)
       const name = match?.[1]
+      // HAP, HAP Alpha and HAP Q never reach ffmpeg — Prism writes those
+      // itself. Getting here means HAP Q Alpha, the one variant that still
+      // needs the extended core.
       return name === 'hap'
-        ? 'Der HAP-Encoder fehlt in diesem ffmpeg-Core. Dafür wird der erweiterte Build benötigt (siehe docs/hap.md).'
+        ? 'HAP Q Alpha braucht den erweiterten ffmpeg-Core (siehe docs/hap.md). HAP, HAP Alpha und HAP Q schreibt Prism dagegen selbst — eine davon funktioniert hier sofort.'
         : `Dieser ffmpeg-Core kennt den gewählten Encoder${name ? ` "${name}"` : ''} nicht.`
     }
     if (/Invalid data found when processing input/i.test(tail)) {

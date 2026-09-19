@@ -97,19 +97,25 @@ harmlos: er setzt dann Header, die ohnehin schon stimmen.
 
 ## Architektur
 
-### Zwei Engines, ein Router
+### Drei Engines, ein Router
 
-| | Bildpfad | Medienpfad |
-|---|---|---|
-| Läuft auf | `OffscreenCanvas` im Worker-Pool | `ffmpeg.wasm` |
-| Parallelität | `cores / 2`, max. 4 | strikt 1 |
-| Formate | PNG, JPEG, WebP, AVIF, BMP, TIFF, ICO | alles andere |
+| | Bildpfad | Medienpfad | HAP-Pfad |
+|---|---|---|---|
+| Läuft auf | `OffscreenCanvas` im Worker-Pool | `ffmpeg.wasm` | eigener Worker |
+| Parallelität | `cores / 2`, max. 4 | strikt 1 | strikt 1 |
+| Formate | PNG, JPEG, WebP, AVIF, BMP, TIFF, ICO | alles andere | HAP, HAP Alpha, HAP Q |
 
 Der Router sitzt in [`src/engine/scheduler.ts`](src/engine/scheduler.ts). Bilder
 laufen parallel, weil die Jobs kurz und unabhängig sind. Video läuft bewusst
 seriell: es gibt genau eine `ffmpeg.wasm`-Instanz mit einem wasm-Heap, und zwei
 davon würden den Spitzenspeicher verdoppeln, ohne Durchsatz zu gewinnen — der
 Kern nutzt bereits alle Threads, die er bekommt.
+
+HAP teilt sich die Medienspur, kommt aber ohne ffmpeg aus: der Texturkompressor
+ist eigener Code. Die beiden Engines treffen sich an genau einer Stelle — wenn
+`VideoDecoder` die Quelle nicht lesen kann (ProRes, Matroska), erzeugt ffmpeg
+ein Zwischenformat, aus dem der HAP-Worker dann weiterarbeitet. Siehe
+[`docs/hap.md`](docs/hap.md).
 
 ### Hardwarebeschleunigung
 
@@ -122,8 +128,9 @@ Die Hardware-Encoder des Geräts (NVENC, QuickSync, VideoToolbox) sind nur über
 Hardware kann, und zeigt das Ergebnis in der Kopfzeile an.
 
 > **Stand:** Die Capability-Erkennung und das Routing sind vorhanden, der
-> WebCodecs-Encoder selbst ist noch nicht implementiert — aktuell läuft jede
-> Video-Konvertierung über `ffmpeg.wasm`. Siehe [Roadmap](#roadmap).
+> WebCodecs-Encoder selbst ist noch nicht implementiert — außer für HAP läuft
+> jede Video-Konvertierung über `ffmpeg.wasm`. Der HAP-Pfad nutzt WebCodecs
+> bereits zum Dekodieren. Siehe [Roadmap](#roadmap).
 
 ### Große Dateien
 
@@ -179,8 +186,9 @@ Die Zahlen kommen aus drei harten Wänden:
 Dateien über dem harten Limit werden mit Begründung abgelehnt, statt mitten in
 der Konvertierung abzustürzen.
 
-**Auf iOS sind >3 GB und HAP nicht machbar.** Das ist keine Nachlässigkeit,
-sondern eine Plattformgrenze.
+**Auf iOS sind >3 GB nicht machbar, und HAP nur für kurze Clips.** Das ist keine
+Nachlässigkeit, sondern eine Plattformgrenze: eine Minute 1080p HAP Q sind rund
+zwei Gigabyte, und so viel gibt Safari einem Tab nicht.
 
 ---
 
@@ -191,7 +199,7 @@ Jedes Format in [`src/lib/formats.ts`](src/lib/formats.ts) trägt ein
 Kern braucht, wird **angezeigt und markiert**, nie stillschweigend weggelassen.
 
 - `ready` — funktioniert jetzt
-- `requires-core` — braucht den erweiterten ffmpeg-Build (HAP, ProRes, DNxHR)
+- `requires-core` — braucht den erweiterten ffmpeg-Build (ProRes, DNxHR, HAP Q Alpha)
 - `decode-only` — lesbar, nicht schreibbar (FLV, WMV, HEIC, WMA)
 - `planned` — registriert, noch kein Encoder (PDF, JPEG XL, RAW, DDS, Untertitel)
 
@@ -199,7 +207,11 @@ BMP, TIFF und ICO kann `canvas.convertToBlob()` nicht schreiben. Statt dafür ei
 Megabyte WASM zu laden, sind die drei Container in
 [`raster-encoders.ts`](src/engine/raster-encoders.ts) direkt implementiert.
 
-HAP braucht einen eigenen ffmpeg-Build — siehe [`docs/hap.md`](docs/hap.md).
+HAP, HAP Alpha und HAP Q schreibt Prism selbst — DXT-Blockkompression und ein
+QuickTime-Schreiber sind zusammen weniger Code als der Umweg über einen eigenen
+30-MB-ffmpeg-Kern, und sie laufen überall. Nur HAP Q Alpha mit seinen zwei
+Texturen pro Bild bleibt auf dem ffmpeg-Pfad. Siehe
+[`docs/hap.md`](docs/hap.md).
 
 ---
 
@@ -261,6 +273,9 @@ aufzufallen:
 
 - [`tests/ffmpeg-args.test.ts`](tests/ffmpeg-args.test.ts) — der Kommandobauer.
   Ein falsches Flag erzeugt eine Datei, die existiert, aber kaputt ist.
+- [`tests/hap.test.ts`](tests/hap.test.ts) — der HAP-Encoder, gegen unabhängig
+  geschriebene Decoder für DXT, Snappy, die Sections und den QuickTime-Index.
+  Ein Encoder, den nur sein eigener Decoder lesen kann, ist nicht getestet.
 - [`tests/sw-headers.test.ts`](tests/sw-headers.test.ts) — die Header-Logik des
   Service Workers. Kopiert sie eine Antwort falsch, bricht die ganze App auf
   einmal.
@@ -273,13 +288,18 @@ Der Deploy-Workflow führt beide plus `tsc` aus, bevor er veröffentlicht.
 
 **Als Nächstes**
 
-1. **WebCodecs-Encoder** — der eigentliche Geschwindigkeitssprung. Demuxen mit
-   `mp4box.js`, muxen mit `mp4-muxer`/`webm-muxer` (beide sind bereits als
-   Abhängigkeit vorhanden), Ausgabe streamend auf die Platte. Damit fallen
-   gleichzeitig das Größenlimit und der Faktor 10 bei der Dauer.
-2. **Erweiterter ffmpeg-Kern** — HAP, ProRes, DNxHR. Siehe
+1. **WebCodecs-Encoder für die übrigen Codecs** — der eigentliche
+   Geschwindigkeitssprung. Demux mit `mp4box.js` und `VideoDecoder` stehen
+   seit dem HAP-Encoder bereits ([`hap/frame-source.ts`](src/engine/hap/frame-source.ts));
+   es fehlt die Gegenrichtung, also `VideoEncoder` plus `mp4-muxer`/`webm-muxer`
+   und die Ausgabe streamend auf die Platte. Damit fallen gleichzeitig das
+   Größenlimit und der Faktor 10 bei der Dauer.
+2. **HAP auf der GPU** — die Blockkompression ist genau die Art Arbeit, für die
+   ein WebGPU-Compute-Shader da ist. Auszutauschen wäre allein
+   [`hap/dxt.ts`](src/engine/hap/dxt.ts); der Rest der Kette bliebe stehen.
+3. **Erweiterter ffmpeg-Kern** — ProRes, DNxHR, HAP Q Alpha. Siehe
    [`docs/hap.md`](docs/hap.md).
-3. **Zuschneiden und Trimmen in der Oberfläche** — die Einstellungen
+4. **Zuschneiden und Trimmen in der Oberfläche** — die Einstellungen
    (`trimStart`, `trimEnd`) und die ffmpeg-Argumente existieren bereits, es fehlt
    nur die Bedienung.
 

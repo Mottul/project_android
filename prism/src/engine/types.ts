@@ -265,3 +265,9 @@ export type WorkerResponse =
       durationMs: number
     }
   | { id: string; type: 'error'; message: string; fatal?: boolean }
+  /**
+   * The HAP engine can read the settings but not this particular source — an
+   * unsupported container or a codec WebCodecs will not decode. The scheduler
+   * answers it by transcoding to an intermediate and asking again.
+   */
+  | { id: string; type: 'fallback'; reason: string }
