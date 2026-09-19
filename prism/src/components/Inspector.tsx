@@ -372,6 +372,13 @@ function VideoQuality() {
           />
         </Field>
 
+        <Toggle
+          checked={!v.stripAudio}
+          onChange={(keep) => patchVideo({ stripAudio: !keep, audioCodec: keep ? 'pcm' : 'none' })}
+          label="Tonspur übernehmen"
+          hint="Als unkomprimiertes PCM, 16 Bit. Alles andere müsste der Medienserver beim Abspielen dekodieren — genau das, was HAP vermeiden soll."
+        />
+
         <ResolutionControls />
       </Section>
     )
@@ -757,8 +764,8 @@ function VideoAdvanced() {
       {isNativeHap && (
         <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-faint">
           <Info size={12} className="mt-[1px] shrink-0" />
-          HAP schreibt Prism selbst, ohne ffmpeg. Die Ausgabe ist eine reine Videospur — Tonspur,
-          Zweipass und Faststart gibt es hier nicht.
+          HAP schreibt Prism selbst, ohne ffmpeg. Der Ton geht immer als PCM mit; Zweipass und
+          Faststart gibt es hier nicht.
         </p>
       )}
 

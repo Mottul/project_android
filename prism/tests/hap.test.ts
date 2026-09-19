@@ -7,6 +7,7 @@ import {
   splitIntoChunks,
   writeSectionHeader,
 } from '../src/engine/hap/hap-frame'
+import { findDecoderSpecificInfo, opusHeadFrom } from '../src/engine/hap/audio'
 import { snappyCompress } from '../src/engine/hap/snappy'
 import { buildFtyp, buildMdatHeader, buildMoov } from '../src/engine/hap/mov'
 import {
@@ -773,5 +774,212 @@ describe('OutputGrid', () => {
     const grid = new OutputGrid(1000, 10)
     grid.slotsBefore(0)
     expect(grid.slotsBefore(Number.MAX_SAFE_INTEGER)).toBe(10)
+  })
+})
+
+/* ===========================================================================
+   Audio
+
+   The container work is checked here; the decoding itself needs a real
+   AudioDecoder and is exercised against a generated Opus clip in the browser.
+   ======================================================================== */
+
+describe('audio configuration', () => {
+  it('finds the AudioSpecificConfig inside an esds', () => {
+    // version/flags, then ES_Descriptor -> DecoderConfig -> DecoderSpecificInfo.
+    const esds = new Uint8Array([
+      0, 0, 0, 0,
+      0x03, 0x19, 0x00, 0x01, 0x00,
+      0x04, 0x11, 0x40, 0x15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0x05, 0x02, 0x11, 0x90,
+      0x06, 0x01, 0x02,
+    ])
+    expect(Array.from(findDecoderSpecificInfo(esds) ?? [])).toEqual([0x11, 0x90])
+  })
+
+  it('reads a multi-byte descriptor length', () => {
+    const body = new Uint8Array(200).fill(0xaa)
+    const esds = new Uint8Array([
+      0, 0, 0, 0,
+      // Lengths here use the four-byte continuation form real muxers emit.
+      0x03, 0x80, 0x80, 0x80, 0xff, 0x00, 0x01, 0x00,
+      0x04, 0x80, 0x80, 0x80, 0xf0, 0x40, 0x15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0x05, 0x80, 0x80, 0x81, 0x48, ...body,
+    ])
+    const found = findDecoderSpecificInfo(esds)
+    expect(found?.length).toBe(200)
+    expect(found?.[0]).toBe(0xaa)
+  })
+
+  it('returns null rather than guessing when there is no config', () => {
+    expect(findDecoderSpecificInfo(new Uint8Array([0, 0, 0, 0]))).toBeNull()
+    expect(findDecoderSpecificInfo(new Uint8Array([0, 0, 0, 0, 0x03, 0x40, 0, 1, 0]))).toBeNull()
+  })
+
+  it('rebuilds an OpusHead with the endianness swapped', () => {
+    // dOps body: version, channels, preSkip BE, rate BE, gain BE, family.
+    const dOps = new Uint8Array([0, 2, 0x01, 0x38, 0x00, 0x00, 0xbb, 0x80, 0x00, 0x00, 0])
+    const head = opusHeadFrom(dOps)!
+    const view = new DataView(head.buffer, head.byteOffset, head.byteLength)
+
+    expect(String.fromCharCode(...head.subarray(0, 8))).toBe('OpusHead')
+    expect(head[8]).toBe(1)
+    expect(head[9]).toBe(2)
+    expect(view.getUint16(10, true)).toBe(312)
+    expect(view.getUint32(12, true)).toBe(48000)
+    expect(view.getUint16(16, true)).toBe(0)
+    expect(head[18]).toBe(0)
+    expect(head.length).toBe(19)
+  })
+
+  it('carries the channel mapping table for surround', () => {
+    const dOps = new Uint8Array([0, 6, 0x01, 0x38, 0, 0, 0xbb, 0x80, 0, 0, 1, 4, 2, 0, 1, 2, 3, 4, 5])
+    const head = opusHeadFrom(dOps)!
+    expect(head[18]).toBe(1)
+    expect(Array.from(head.subarray(19))).toEqual([4, 2, 0, 1, 2, 3, 4, 5])
+  })
+
+  it('refuses a truncated dOps instead of reading past it', () => {
+    expect(opusHeadFrom(new Uint8Array([0, 2, 0x01]))).toBeNull()
+  })
+})
+
+describe('MOV with sound', () => {
+  const video = {
+    variant: 'Hap1' as const,
+    width: 128,
+    height: 96,
+    timescale: 12000,
+    sampleDelta: 1000,
+    compressorName: 'Hap',
+    depth: 24 as const,
+  }
+
+  const audio = {
+    info: { sampleRate: 48000, channels: 2, frameCount: 48000, byteLength: 48000 * 4 },
+    parts: [new Uint8Array(48000 * 4)],
+  }
+
+  function assemble(sizes: number[], withAudio = true) {
+    const frames = sizes.map((size) => new Uint8Array(size))
+    const layout = layoutMovie(frames, sizes, video, withAudio ? audio : null)
+    const flat = new Uint8Array(layout.totalBytes)
+    let at = 0
+    for (const part of layout.parts) {
+      flat.set(part as Uint8Array, at)
+      at += (part as Uint8Array).length
+    }
+    return { flat, layout }
+  }
+
+  function findBoxIn(data: Uint8Array, type: string, from: number, to: number) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    let at = from
+    while (at + 8 <= to) {
+      const size = view.getUint32(at)
+      const name = String.fromCharCode(data[at + 4], data[at + 5], data[at + 6], data[at + 7])
+      if (name === type) return { start: at, end: at + size, body: at + 8 }
+      if (size < 8) break
+      at += size
+    }
+    return null
+  }
+
+  function traks(file: Uint8Array) {
+    const [moovStart, moovEnd] = findBox(file, ['moov'])
+    const view = new DataView(file.buffer)
+    const found: Array<{ start: number; end: number; body: number }> = []
+    let at = moovStart + 8
+    while (at + 8 < moovEnd) {
+      const size = view.getUint32(at)
+      const name = String.fromCharCode(file[at + 4], file[at + 5], file[at + 6], file[at + 7])
+      if (name === 'trak') found.push({ start: at, end: at + size, body: at + 8 })
+      if (size < 8) break
+      at += size
+    }
+    return found
+  }
+
+  it('writes a second track only when there is audio', () => {
+    expect(traks(assemble([64, 64]).flat)).toHaveLength(2)
+    expect(traks(assemble([64, 64], false).flat)).toHaveLength(1)
+  })
+
+  it('keeps the PCM as its own part, after the last frame', () => {
+    const { layout } = assemble([100, 120])
+    // ftyp, the mdat header, two frames, the PCM, moov — in that order.
+    expect(layout.parts).toHaveLength(6)
+    expect(layout.parts[4]).toBe(audio.parts[0])
+  })
+
+  it('describes the PCM as 16-bit little-endian stereo', () => {
+    const { flat } = assemble([64])
+    const sound = traks(flat)[1]
+    const [start] = findBox(flat, ['mdia', 'minf', 'stbl', 'stsd'], sound.body, sound.end)
+    const entry = findBoxIn(flat, 'sowt', start + 16, sound.end)!
+    const view = new DataView(flat.buffer)
+
+    expect(view.getUint16(entry.body + 16)).toBe(2) // channels
+    expect(view.getUint16(entry.body + 18)).toBe(16) // bits
+    expect(view.getUint32(entry.body + 24) / 65536).toBe(48000)
+  })
+
+  it('indexes the PCM as fixed-size samples at one tick each', () => {
+    const { flat } = assemble([64])
+    const sound = traks(flat)[1]
+    const view = new DataView(flat.buffer)
+
+    const [sttsStart] = findBox(flat, ['mdia', 'minf', 'stbl', 'stts'], sound.body, sound.end)
+    expect(view.getUint32(sttsStart + 12)).toBe(1) // one run
+    expect(view.getUint32(sttsStart + 16)).toBe(48000) // frames
+    expect(view.getUint32(sttsStart + 20)).toBe(1) // one tick per frame
+
+    const [stszStart] = findBox(flat, ['mdia', 'minf', 'stbl', 'stsz'], sound.body, sound.end)
+    expect(view.getUint32(stszStart + 12)).toBe(4) // stereo, 16 bit
+    expect(view.getUint32(stszStart + 16)).toBe(48000)
+
+    const [mdhdStart] = findBox(flat, ['mdia', 'mdhd'], sound.body, sound.end)
+    expect(view.getUint32(mdhdStart + 20)).toBe(48000) // timescale is the rate
+  })
+
+  it('points the sound chunk at the first PCM byte', () => {
+    const sizes = [100, 120]
+    const { flat } = assemble(sizes)
+    const [mdatStart] = findBox(flat, ['mdat'])
+    const sound = traks(flat)[1]
+    const view = new DataView(flat.buffer)
+    const [stcoStart] = findBox(flat, ['mdia', 'minf', 'stbl', 'stco'], sound.body, sound.end)
+
+    expect(view.getUint32(stcoStart + 12)).toBe(1) // one chunk
+    expect(view.getUint32(stcoStart + 16)).toBe(mdatStart + 8 + sizes[0] + sizes[1])
+  })
+
+  it('gives the sound track full volume and the video track none', () => {
+    const { flat } = assemble([64])
+    const [videoTrak, soundTrak] = traks(flat)
+    const view = new DataView(flat.buffer)
+    const [videoTkhd] = findBox(flat, ['tkhd'], videoTrak.body, videoTrak.end)
+    const [soundTkhd] = findBox(flat, ['tkhd'], soundTrak.body, soundTrak.end)
+
+    expect(view.getUint16(videoTkhd + 8 + 36)).toBe(0)
+    expect(view.getUint16(soundTkhd + 8 + 36)).toBe(0x0100)
+    expect(view.getUint32(videoTkhd + 8 + 12)).toBe(1)
+    expect(view.getUint32(soundTkhd + 8 + 12)).toBe(2)
+  })
+
+  it('runs the movie as long as its longest track', () => {
+    // Two frames at 12 fps is 167 ms of video against a full second of audio.
+    const { flat } = assemble([64, 64])
+    const [mvhdStart] = findBox(flat, ['moov', 'mvhd'])
+    const view = new DataView(flat.buffer)
+    expect(view.getUint32(mvhdStart + 8 + 16)).toBe(1000)
+    expect(view.getUint32(mvhdStart + 8 + 96)).toBe(3) // next free track id
+  })
+
+  it('counts the PCM into mdat and into the total', () => {
+    const { flat, layout } = assemble([100])
+    const [mdatStart, mdatEnd] = findBox(flat, ['mdat'])
+    expect(mdatEnd - mdatStart).toBe(8 + 100 + audio.info.byteLength)
+    expect(layout.totalBytes).toBe(flat.length)
   })
 })

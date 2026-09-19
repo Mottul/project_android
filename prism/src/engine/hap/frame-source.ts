@@ -43,6 +43,7 @@ const SAMPLE_BATCH = 512
 interface Demuxed {
   mp4: MP4File
   track: MP4Track
+  audioTrack: MP4Track | null
   description: Uint8Array
 }
 
@@ -96,7 +97,12 @@ async function demux(file: File): Promise<Demuxed> {
   const track = (info as MP4Info).videoTracks?.[0]
   if (!track) throw new UnsupportedSource('Die Datei enthält keine Videospur.')
 
-  return { mp4, track, description: describe(mp4, track) }
+  return {
+    mp4,
+    track,
+    audioTrack: (info as MP4Info).audioTracks?.[0] ?? null,
+    description: describe(mp4, track),
+  }
 }
 
 /**
@@ -124,6 +130,12 @@ export interface FrameSource {
   info: SourceInfo
   /** Frames in presentation order. The consumer closes each one. */
   frames(signal: AbortSignal): AsyncGenerator<VideoFrame>
+  /**
+   * The demuxer and the first audio track, for the audio pass. Exposed rather
+   * than decoded here because the sound is optional: a job that cannot read it
+   * still produces a file.
+   */
+  audio: { mp4: MP4File; track: MP4Track } | null
   close(): void
 }
 
@@ -132,7 +144,7 @@ export async function openFrameSource(file: File): Promise<FrameSource> {
     throw new UnsupportedSource('Dieser Browser hat keinen WebCodecs-Decoder.')
   }
 
-  const { mp4, track, description } = await demux(file)
+  const { mp4, track, audioTrack, description } = await demux(file)
 
   const width = track.track_width || track.video?.width || 0
   const height = track.track_height || track.video?.height || 0
@@ -254,6 +266,7 @@ export async function openFrameSource(file: File): Promise<FrameSource> {
   return {
     info,
     frames,
+    audio: audioTrack ? { mp4, track: audioTrack } : null,
     close() {
       try {
         mp4.stop()

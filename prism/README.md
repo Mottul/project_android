@@ -112,10 +112,11 @@ davon würden den Spitzenspeicher verdoppeln, ohne Durchsatz zu gewinnen — der
 Kern nutzt bereits alle Threads, die er bekommt.
 
 HAP teilt sich die Medienspur, kommt aber ohne ffmpeg aus: der Texturkompressor
-ist eigener Code. Die beiden Engines treffen sich an genau einer Stelle — wenn
-`VideoDecoder` die Quelle nicht lesen kann (ProRes, Matroska), erzeugt ffmpeg
-ein Zwischenformat, aus dem der HAP-Worker dann weiterarbeitet. Siehe
-[`docs/hap.md`](docs/hap.md).
+ist eigener Code — als WebGPU-Compute-Shader, wo es eine Karte gibt, sonst auf
+der CPU. Ton geht als unkomprimiertes PCM mit. Die beiden Engines treffen sich
+an genau einer Stelle: wenn `VideoDecoder` die Quelle nicht lesen kann (ProRes,
+Matroska), erzeugt ffmpeg ein Zwischenformat, aus dem der HAP-Worker
+weiterarbeitet. Siehe [`docs/hap.md`](docs/hap.md).
 
 ### Hardwarebeschleunigung
 
@@ -207,10 +208,10 @@ BMP, TIFF und ICO kann `canvas.convertToBlob()` nicht schreiben. Statt dafür ei
 Megabyte WASM zu laden, sind die drei Container in
 [`raster-encoders.ts`](src/engine/raster-encoders.ts) direkt implementiert.
 
-HAP, HAP Alpha und HAP Q schreibt Prism selbst — DXT-Blockkompression und ein
-QuickTime-Schreiber sind zusammen weniger Code als der Umweg über einen eigenen
-30-MB-ffmpeg-Kern, und sie laufen überall. Nur HAP Q Alpha mit seinen zwei
-Texturen pro Bild bleibt auf dem ffmpeg-Pfad. Siehe
+HAP, HAP Alpha und HAP Q schreibt Prism selbst — DXT-Blockkompression, ein
+QuickTime-Schreiber und eine PCM-Tonspur sind zusammen weniger Code als der
+Umweg über einen eigenen 30-MB-ffmpeg-Kern, und sie laufen überall. Nur HAP Q
+Alpha mit seinen zwei Texturen pro Bild bleibt auf dem ffmpeg-Pfad. Siehe
 [`docs/hap.md`](docs/hap.md).
 
 ---
@@ -276,6 +277,10 @@ aufzufallen:
 - [`tests/hap.test.ts`](tests/hap.test.ts) — der HAP-Encoder, gegen unabhängig
   geschriebene Decoder für DXT, Snappy, die Sections und den QuickTime-Index.
   Ein Encoder, den nur sein eigener Decoder lesen kann, ist nicht getestet.
+- [`tests/dxt-shader.test.ts`](tests/dxt-shader.test.ts) — der GPU-Shader gegen
+  die CPU-Implementierung, ausgeführt in einem WGSL-Interpreter. WebGPU läuft in
+  keiner CI, und eine Karte, die leicht falsche Blöcke schreibt, fällt sonst
+  erst auf dem Medienserver auf.
 - [`tests/sw-headers.test.ts`](tests/sw-headers.test.ts) — die Header-Logik des
   Service Workers. Kopiert sie eine Antwort falsch, bricht die ganze App auf
   einmal.
@@ -294,11 +299,10 @@ Der Deploy-Workflow führt beide plus `tsc` aus, bevor er veröffentlicht.
    es fehlt die Gegenrichtung, also `VideoEncoder` plus `mp4-muxer`/`webm-muxer`
    und die Ausgabe streamend auf die Platte. Damit fallen gleichzeitig das
    Größenlimit und der Faktor 10 bei der Dauer.
-2. **HAP auf der GPU** — die Blockkompression ist genau die Art Arbeit, für die
-   ein WebGPU-Compute-Shader da ist. Auszutauschen wäre allein
-   [`hap/dxt.ts`](src/engine/hap/dxt.ts); der Rest der Kette bliebe stehen.
-3. **Erweiterter ffmpeg-Kern** — ProRes, DNxHR, HAP Q Alpha. Siehe
+2. **Erweiterter ffmpeg-Kern** — ProRes, DNxHR, HAP Q Alpha. Siehe
    [`docs/hap.md`](docs/hap.md).
+3. **Ton auch über den ffmpeg-Umweg** — braucht das Video ein Zwischenformat,
+   geht die Tonspur derzeit verloren.
 4. **Zuschneiden und Trimmen in der Oberfläche** — die Einstellungen
    (`trimStart`, `trimEnd`) und die ffmpeg-Argumente existieren bereits, es fehlt
    nur die Bedienung.

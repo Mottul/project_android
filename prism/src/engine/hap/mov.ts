@@ -25,6 +25,22 @@ export type HapVariant = 'Hap1' | 'Hap5' | 'HapY'
  */
 type Bytes = Uint8Array<ArrayBuffer>
 
+/**
+ * A PCM sound track to write beside the video.
+ *
+ * 16-bit little-endian (`sowt`) is the format QuickTime has always used for
+ * uncompressed audio and the one every media server reads without thinking
+ * about it. Compressed audio would defeat the point of HAP: the format exists
+ * so that playback costs nothing.
+ */
+export interface MovAudioInfo {
+  sampleRate: number
+  channels: number
+  /** PCM frames, i.e. samples per channel. */
+  frameCount: number
+  byteLength: number
+}
+
 export interface MovTrackInfo {
   variant: HapVariant
   width: number
@@ -162,47 +178,55 @@ function buildMvhd(durationTicks: number, nextTrackId: number): Bytes {
   return box('mvhd', w.toUint8Array())
 }
 
-function buildTkhd(info: MovTrackInfo, durationTicks: number): Bytes {
+function buildTkhd(
+  trackId: number,
+  durationTicks: number,
+  width: number,
+  height: number,
+  /** 0x0100 is full; a video track carries 0. */
+  volume: number,
+): Bytes {
   const w = new Writer()
   w.u32(0x0000000f) // version 0, enabled | in movie | in preview | in poster
   w.u32(0).u32(0)
-  w.u32(1) // track id
+  w.u32(trackId)
   w.u32(0)
   w.u32(durationTicks)
   w.u32(0).u32(0)
   w.u16(0) // layer
   w.u16(0) // alternate group
-  w.u16(0) // volume: silent for a video track
+  w.u16(volume)
   w.u16(0)
   w.u32(0x00010000).u32(0).u32(0)
   w.u32(0).u32(0x00010000).u32(0)
   w.u32(0).u32(0).u32(0x40000000)
   // Multiplication rather than a shift: a 65536-pixel-wide frame would shift
   // straight off the top of a 32-bit integer.
-  w.u32(info.width * 65536)
-  w.u32(info.height * 65536)
+  w.u32(width * 65536)
+  w.u32(height * 65536)
   return box('tkhd', w.toUint8Array())
 }
 
-function buildMdhd(info: MovTrackInfo, mediaDuration: number): Bytes {
+function buildMdhd(timescale: number, mediaDuration: number): Bytes {
   const w = new Writer()
   w.u32(0)
   w.u32(0).u32(0)
-  w.u32(info.timescale)
+  w.u32(timescale)
   w.u32(mediaDuration)
   w.u16(0x55c4) // language: undetermined
   w.u16(0)
   return box('mdhd', w.toUint8Array())
 }
 
-function buildHdlr(): Bytes {
+function buildHdlr(subtype: 'vide' | 'soun'): Bytes {
+  const name = subtype === 'vide' ? 'VideoHandler' : 'SoundHandler'
   const w = new Writer()
   w.u32(0)
   w.code('mhlr')
-  w.code('vide')
+  w.code(subtype)
   w.u32(0).u32(0).u32(0)
   // QuickTime writes a counted string here; players read the name for display.
-  w.u8(12).ascii('VideoHandler')
+  w.u8(name.length).ascii(name)
   return box('hdlr', w.toUint8Array())
 }
 
@@ -302,16 +326,108 @@ function buildChunkOffsets(offsets: number[]): Bytes {
   return box(needs64 ? 'co64' : 'stco', w.toUint8Array())
 }
 
+/** The `sowt` sample entry: uncompressed 16-bit little-endian. */
+function buildSoundStsd(audio: MovAudioInfo): Bytes {
+  const entry = new Writer()
+  entry.zeros(6)
+  entry.u16(1) // data reference index
+  entry.u16(0) // version 0: the classic layout, understood everywhere
+  entry.u16(0) // revision
+  entry.u32(0) // vendor
+  entry.u16(audio.channels)
+  entry.u16(16) // bits per sample
+  entry.u16(0) // compression id
+  entry.u16(0) // packet size
+  // 16.16 fixed point. Every rate anyone ships fits the integer half.
+  entry.u32(Math.round(audio.sampleRate) * 65536)
+
+  const w = new Writer()
+  w.u32(0).u32(1)
+  return box('stsd', concat([w.toUint8Array(), box('sowt', entry.toUint8Array())]))
+}
+
+/** Fixed-size samples need no table, only the size and the count. */
+function buildFixedStsz(sampleSize: number, count: number): Bytes {
+  const w = new Writer()
+  w.u32(0)
+  w.u32(sampleSize)
+  w.u32(count)
+  return box('stsz', w.toUint8Array())
+}
+
+function buildSoundStsc(samplesPerChunk: number): Bytes {
+  const w = new Writer()
+  w.u32(0)
+  w.u32(1)
+  w.u32(1) // first chunk
+  w.u32(samplesPerChunk)
+  w.u32(1) // sample description index
+  return box('stsc', w.toUint8Array())
+}
+
 /**
- * Assemble `moov` for a finished track.
+ * The sound track.
  *
- * `mdatStart` is where the first frame's bytes begin in the file, i.e. just
- * past the `mdat` header.
+ * All of the PCM sits in one chunk after the video. Interleaving it between
+ * frames would suit a player reading the file straight through, but a HAP frame
+ * is megabytes and a second of audio is kilobytes — the interleave would be
+ * almost all video anyway, and every tool that reads HAP goes through the index.
  */
-export function buildMoov(info: MovTrackInfo, mdatStart: number): Bytes {
+function buildSoundTrak(audio: MovAudioInfo, audioStart: number, durationTicks: number): Bytes {
+  const sampleSize = audio.channels * 2
+
+  const stbl = box(
+    'stbl',
+    concat([
+      buildSoundStsd(audio),
+      buildStts(audio.frameCount, 1),
+      buildSoundStsc(audio.frameCount),
+      buildFixedStsz(sampleSize, audio.frameCount),
+      buildChunkOffsets([audioStart]),
+    ]),
+  )
+
+  const smhd = (() => {
+    const w = new Writer()
+    w.u32(0)
+    w.u16(0) // balance: centred
+    w.u16(0)
+    return box('smhd', w.toUint8Array())
+  })()
+
+  const minf = box('minf', concat([smhd, buildDinf(), stbl]))
+  const mdia = box(
+    'mdia',
+    concat([
+      buildMdhd(Math.round(audio.sampleRate), audio.frameCount),
+      buildHdlr('soun'),
+      minf,
+    ]),
+  )
+  // A sound track has no dimensions; full volume, or players open it muted.
+  return box('trak', concat([buildTkhd(2, durationTicks, 0, 0, 0x0100), mdia]))
+}
+
+/**
+ * Assemble `moov` for a finished file.
+ *
+ * `mdatStart` is where the first frame's bytes begin, i.e. just past the `mdat`
+ * header; `audioStart` is where the PCM begins, which is after every frame.
+ */
+export function buildMoov(
+  info: MovTrackInfo,
+  mdatStart: number,
+  audio?: MovAudioInfo | null,
+  audioStart = 0,
+): Bytes {
   const sampleCount = info.sampleSizes.length
   const mediaDuration = sampleCount * info.sampleDelta
-  const durationTicks = Math.round((mediaDuration / info.timescale) * MOVIE_TIMESCALE)
+  const videoTicks = Math.round((mediaDuration / info.timescale) * MOVIE_TIMESCALE)
+  const audioTicks = audio
+    ? Math.round((audio.frameCount / audio.sampleRate) * MOVIE_TIMESCALE)
+    : 0
+  // The movie lasts as long as its longest track, or a player stops early.
+  const durationTicks = Math.max(videoTicks, audioTicks)
 
   const offsets: number[] = []
   let at = mdatStart
@@ -340,8 +456,18 @@ export function buildMoov(info: MovTrackInfo, mdatStart: number): Bytes {
   })()
 
   const minf = box('minf', concat([vmhd, buildDinf(), stbl]))
-  const mdia = box('mdia', concat([buildMdhd(info, mediaDuration), buildHdlr(), minf]))
-  const trak = box('trak', concat([buildTkhd(info, durationTicks), mdia]))
+  const mdia = box(
+    'mdia',
+    concat([buildMdhd(info.timescale, mediaDuration), buildHdlr('vide'), minf]),
+  )
+  const videoTrak = box(
+    'trak',
+    concat([buildTkhd(1, videoTicks, info.width, info.height, 0), mdia]),
+  )
 
-  return box('moov', concat([buildMvhd(durationTicks, 2), trak]))
+  const traks = audio
+    ? concat([videoTrak, buildSoundTrak(audio, audioStart, audioTicks)])
+    : videoTrak
+
+  return box('moov', concat([buildMvhd(durationTicks, audio ? 3 : 2), traks]))
 }
