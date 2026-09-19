@@ -25,6 +25,7 @@ import {
 import { icon } from './icons'
 import { confirmDestructive, openDialog, toast } from './feedback'
 import { Enricher, addFolder, pickAndImportFiles, rescanFolder } from './import'
+import { lapsedSources, requestAllAccess } from './permissions'
 import { openSettings } from './settings-panel'
 
 export interface LibraryCallbacks {
@@ -59,6 +60,7 @@ export class LibraryView {
 
   private readonly searchInput: HTMLInputElement
   private readonly filterBar: HTMLElement
+  private readonly accessBar: HTMLElement
   private readonly body: HTMLElement
   private readonly enricher: Enricher
 
@@ -87,6 +89,7 @@ export class LibraryView {
     }) as HTMLInputElement
 
     this.filterBar = h('div.filter-bar')
+    this.accessBar = h('div.access-bar')
     this.body = h('div.library-body')
 
     this.element = h(
@@ -94,6 +97,7 @@ export class LibraryView {
       {},
       this.buildTopBar(),
       this.filterBar,
+      this.accessBar,
       this.body,
     )
 
@@ -104,7 +108,58 @@ export class LibraryView {
   /** Called when the library comes back on screen after the reader. */
   show(): void {
     this.renderBody()
+    void this.renderAccessBar()
     this.focusSearch()
+  }
+
+  /**
+   * The one place the lapsed-permission question is asked up front.
+   *
+   * A browser hands a stored folder handle back in the `prompt` state after
+   * every restart, and only a user gesture can move it to `granted`. Rather
+   * than let that surface as a failure when a document is tapped, the library
+   * says so plainly and offers the one button that fixes it for every folder at
+   * once.
+   */
+  private async renderAccessBar(): Promise<void> {
+    const lapsed = await lapsedSources()
+    clear(this.accessBar)
+    this.accessBar.classList.toggle('is-open', lapsed.length > 0)
+    if (!lapsed.length) return
+
+    const names = lapsed.map((source) => `„${source.name}“`).join(', ')
+    this.accessBar.appendChild(
+      h(
+        'div.access-notice',
+        {},
+        h('span', { html: icon('folder', 17) }),
+        h(
+          'span.grow',
+          {},
+          lapsed.length === 1
+            ? `Der Zugriff auf ${names} muss nach dem Start einmal bestätigt werden.`
+            : `Der Zugriff auf ${lapsed.length} Ordner (${names}) muss nach dem Start einmal bestätigt werden.`,
+        ),
+        h(
+          'button.button.primary',
+          {
+            type: 'button',
+            onclick: async () => {
+              const { granted, total } = await requestAllAccess()
+              await this.renderAccessBar()
+              this.callbacks.onChanged()
+              toast(
+                granted === total
+                  ? 'Zugriff wiederhergestellt.'
+                  : `${granted} von ${total} Ordnern freigegeben.`,
+                { kind: granted === total ? 'ok' : 'warn' },
+              )
+            },
+          },
+          'Zugriff erlauben',
+        ),
+      ),
+    )
   }
 
   focusSearch(): void {
@@ -117,6 +172,7 @@ export class LibraryView {
     this.docs = docs
     this.renderFilters()
     this.renderBody()
+    void this.renderAccessBar()
     void this.enricher.enqueuePending()
   }
 
@@ -145,7 +201,6 @@ export class LibraryView {
         h('span', { html: icon('search', 17) }),
         this.searchInput,
       ),
-      h('span.spacer'),
       h('button.icon-button', {
         type: 'button',
         title: 'Ordner hinzufügen',

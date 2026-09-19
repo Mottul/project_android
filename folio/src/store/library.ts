@@ -82,6 +82,10 @@ export function listSources(): Promise<LibrarySource[]> {
   return idbGetAll<LibrarySource>(STORE.sources)
 }
 
+export function getSource(id: string): Promise<LibrarySource | undefined> {
+  return idbGet<LibrarySource>(STORE.sources, id)
+}
+
 export function getDoc(id: string): Promise<DocEntry | undefined> {
   return idbGet<DocEntry>(STORE.docs, id)
 }

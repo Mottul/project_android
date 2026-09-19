@@ -34,6 +34,26 @@ Im zweiten Fall funktioniert die Bibliothek genauso, nur liegt der Inhalt als
 Kopie in Folio und „Über Original speichern“ entfällt. Welcher Weg genommen
 wurde, steht in der Quellenliste unter „Quellen und Einstellungen“.
 
+**Nach einem Neustart muss der Ordnerzugriff bestätigt werden.** Der Ordner
+selbst bleibt gespeichert, die Erlaubnis dazu nicht: der Browser gibt sie in
+der Stellung „fragen“ zurück und lässt sie nur durch eine bewusste Handlung
+wieder freischalten. Das ist Absicht — eine Seite, die beim Laden still wieder
+an fremde Dokumente käme, wäre eine Lücke — und Folio kann es nicht umgehen.
+
+Was Folio tut, ist einmal fragen statt dauernd:
+
+* Die Bibliothek zeigt oben einen Hinweis mit einem Knopf, der **alle** Ordner
+  auf einmal freigibt.
+* Wer stattdessen gleich ein Dokument antippt, bekommt die Frage dort — der
+  Tipp ist die nötige Handlung, danach öffnet das Dokument sich sofort.
+* Gefragt wird immer nach dem **Ordner**, nie nach der einzelnen Datei: eine
+  Freigabe deckt alles darin ab. Pro Datei zu fragen hieße ein Dialog pro
+  Dokument.
+
+**Als App installiert bleibt es dauerhaft.** Chromium bietet in diesem Dialog
+dann „Bei jedem Besuch zulassen“ an; danach kommt die Frage nicht wieder. Im
+normalen Browser-Tab gibt es diese Option nicht.
+
 Dokumente lassen sich außerdem einzeln auswählen, ins Fenster ziehen oder vom
 Betriebssystem übergeben („Öffnen mit Folio“).
 
@@ -199,7 +219,7 @@ mit mehreren absolut positionierten Ebenen darüber, deren Geometrie bei jedem
 Zoom neu gerechnet wird — dabei wäre ein virtuelles DOM im Weg, und der Rest der
 App ist klein genug, dass sich eines nicht lohnt.
 
-### Drei Dinge, die leicht kaputtgehen
+### Vier Dinge, die leicht kaputtgehen
 
 **Die Textebene.** pdf.js zeichnet die Seite als Bild und legt für jeden
 Textlauf ein durchsichtiges Element darüber. Die genaue Größe dieser Elemente
@@ -208,6 +228,12 @@ kommt aus CSS-Variablen, die pdf.js setzt (`--total-scale-factor`,
 `styles/app.css`. Fehlen sie, sitzt die unsichtbare Schrift nicht auf der
 sichtbaren: Markierungen landen neben dem Satz, und der Texteditor bietet ein
 Feld an, das nicht zur Zeile passt.
+
+**Die Breite der Seitenspalte.** `.pages` ist `width: max-content`. Als
+gewöhnlicher Block wäre die Spalte immer so breit wie der Viewport, und eine
+größer gezoomte Seite liefe nach beiden Seiten über — erreichbar ist beim
+Scrollen aber nur der Überlauf nach rechts. Der linke Rand war damit
+abgeschnitten, und zwar um so mehr, je weiter man hineinzoomte.
 
 **Die Gestentrennung.** `ui/gestures.ts` hört auf dem Viewport in der
 *Capture*-Phase, die Werkzeuge hören weiter unten am Ziel. Diese Reihenfolge ist
@@ -260,6 +286,8 @@ Hand im Browser geprüft; dafür gibt es keine Abhängigkeit im Repository.
 
 ## Grenzen
 
+* Der Ordnerzugriff muss nach jedem Start bestätigt werden, solange Folio nicht
+  als App installiert ist — siehe oben. Das entscheidet der Browser, nicht Folio.
 * Passwortgeschützte PDFs werden zum Lesen geöffnet, wenn das Passwort bekannt
   ist; gespeichert wird ohne Verschlüsselung.
 * PDF-Formulare werden angezeigt, aber nicht ausgefüllt.
