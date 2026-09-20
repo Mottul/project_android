@@ -9,7 +9,8 @@ installierbar, ohne Konto und ohne Cloud.
 ## Was drin ist
 
 * **Zehn Bauteile** — Fader, Poti (auch Endlos-Encoder), Schalter, Taster, Bank,
-  Auswahl, XY-Pad, Farbe, Anzeige und Text.
+  Auswahl, XY-Pad, Farbe, Anzeige und Text. Die **Bank** ist ein Feld aus
+  Tastern, Schaltern **oder Potis** — je Eintrag eine eigene Adresse.
 * **Freies Raster.** Kacheln verschieben und an der Ecke unten rechts aufziehen,
   4 bis 24 Spalten, „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen
   (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest).
@@ -29,11 +30,27 @@ Regler ziehen **relativ**: Antippen aendert nie einen Wert, erst die Bewegung.
 Wer beim Ziehen **seitlich ausweicht**, bekommt einen feineren Griff (1/4, dann
 1/12) — wie am Pult. Taster geben ein kurzes Vibrieren.
 
-Im Bearbeiten-Modus (Stift oben rechts) verschiebt man Kacheln mit dem Finger,
-zieht sie an der **Ecke unten rechts** groesser und tippt sie kurz an, um
-Adresse, Bereich und Farbe zu aendern. Neue Bauteile kommen ueber
-**+ Bauteil** — oder indem man auf eine freie Stelle im Raster tippt, dann
-landet das Bauteil genau dort.
+Im Bearbeiten-Modus (Stift oben rechts) gilt: **erster Tipp waehlt aus** —
+darunter erscheint eine Leiste mit Einstellungen, Duplizieren und Loeschen —,
+**zweiter Tipp auf dieselbe Kachel oeffnet die Einstellungen**. Ziehen
+verschiebt, die **Ecke unten rechts** zieht auf. Ein Tipp ins Leere hebt nur
+die Auswahl auf; wer **lange auf eine freie Stelle drueckt**, bekommt die
+Bauteil-Auswahl und das neue Bauteil landet genau dort.
+
+**↶ und ↷ nehmen Schritte zurueck und wieder vor** — verschieben, Groesse,
+einfuegen, loeschen, duplizieren, aufraeumen, Spalten und Einstellungen; am
+Rechner auch mit `Strg`/`Cmd` + `Z` und `Strg`/`Cmd` + `Umschalt` + `Z`
+(oder `Strg` + `Y`). Die Schaltflaechen nennen jeweils den Schritt, der
+drankommt; eine neue Aenderung beendet den Faden nach vorn. Der Verlauf gilt der laufenden Sitzung im Bearbeiten-Modus: beim
+Verlassen, beim Seitenwechsel und bei einem neuen Projekt faengt er von vorn
+an. Die Stellung der Regler bleibt dabei unangetastet — zurueck geht der
+Aufbau, nicht das Pult.
+
+Die Einstellungen liegen in **Reitern** (Allgemein · Werte · Eintraege ·
+Groesse), sodass nichts gescrollt werden muss. **Duplizieren** zaehlt
+Beschriftung und Adresse hoch (`/cues/1/recall` → `/cues/2/recall`) und legt
+die Kopie neben das Original — zwei Bauteile auf derselben Adresse entstehen so
+gar nicht erst.
 
 Das Menue (☰) ist eine Liste: Seiten, Verbindung, Monitor, Projekt sichern &
 laden, Einstellungen, Zuruecksetzen, Hilfe — jeder Eintrag oeffnet ein eigenes,
@@ -70,7 +87,7 @@ Kein Build, keine Abhaengigkeiten. Statisch ausliefern reicht:
 
 ```
 npm start          # http://localhost:8080/osc/
-npm test           # Rechenkern, Raster, Bruecke (inkl. Komplettlauf)
+npm test           # Rechenkern, Raster, Poti-Geometrie, Bruecke
 npm run icons:osc  # Icons neu erzeugen
 ```
 
@@ -84,5 +101,6 @@ Aufbau:
 | `js/conn.js` | WebSocket zur Bruecke, Buendelung, Wiederverbinden |
 | `js/widgets.js` | Aufbau und Verhalten der Bauteile |
 | `js/editor.js` | Verschieben, Groesse, Inspektor |
+| `js/icons.js` | Piktogramme der Bauteile und Schaltflaechen |
 | `js/app.js` | Ansicht, Seiten, Monitor, Speichern |
 | `bridge/osc-bridge.mjs` | Bruecke: HTTP + WebSocket + UDP + NovaStar |

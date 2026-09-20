@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   makeWidget, makePage, normalizeProject, normalizeWidget, overlaps, fits, findSlot,
   placeMissing, autoArrange, compact, usedRows, rescale, minSize, dropAt, DEFAULT_COLS,
+  bumpNumber, nextFreeAddress, copyWidget, placeCopy, addressesOf,
 } from '../js/model.js';
 import { buildPreset, starterProject, PRESETS } from '../js/presets.js';
 
@@ -139,4 +140,83 @@ test('Startprojekt hat MadMapper- und NovaStar-Seite', () => {
 test('Standardraster ist zwoelfspaltig', () => {
   assert.equal(DEFAULT_COLS, 12);
   assert.equal(makePage().columns, 12);
+});
+
+/* ----------------------------------------------------------- Duplizieren --- */
+
+test('bumpNumber zaehlt die letzte Zahl hoch', () => {
+  assert.equal(bumpNumber('Surface 1'), 'Surface 2');
+  assert.equal(bumpNumber('/cues/9/recall'), '/cues/10/recall');
+  assert.equal(bumpNumber('/nova/preset/01'), '/nova/preset/02', 'fuehrende Null bleibt');
+  assert.equal(bumpNumber('Master'), 'Master 2', 'ohne Zahl haengt der Zusatz an');
+  assert.equal(bumpNumber('/master/opacity', '2'), '/master/opacity2');
+  assert.equal(bumpNumber(''), '');
+});
+
+test('nextFreeAddress weicht belegten Adressen aus', () => {
+  const taken = new Set(['/s/2/opacity', '/s/3/opacity']);
+  assert.equal(nextFreeAddress('/s/1/opacity', taken), '/s/4/opacity');
+  assert.equal(nextFreeAddress('', taken), '');
+});
+
+test('copyWidget zaehlt Beschriftung und Adressen hoch', () => {
+  const a = makeWidget('fader', { label: 'Surface 1', address: '/surfaces/1/opacity' });
+  const b = makeWidget('fader', { label: 'Surface 2', address: '/surfaces/2/opacity' });
+  const copy = copyWidget(a, [a, b]);
+  assert.notEqual(copy.id, a.id);
+  assert.equal(copy.label, 'Surface 2');
+  assert.equal(copy.address, '/surfaces/3/opacity', 'belegte Adresse wird uebersprungen');
+  assert.equal(a.address, '/surfaces/1/opacity', 'die Vorlage bleibt unberuehrt');
+});
+
+test('copyWidget zaehlt auch Y-Adresse und Eintraege hoch', () => {
+  const xy = makeWidget('xy', { address: '/pos/1/x', addressY: '/pos/1/y' });
+  const bank = makeWidget('bank', {
+    items: [{ label: '1', address: '/cues/1/recall', value: 0 }, { label: '2', address: '/cues/2/recall', value: 0 }],
+  });
+  const c1 = copyWidget(xy, [xy]);
+  assert.equal(c1.address, '/pos/2/x');
+  assert.equal(c1.addressY, '/pos/2/y');
+  const c2 = copyWidget(bank, [bank]);
+  assert.deepEqual(c2.items.map((i) => i.address), ['/cues/3/recall', '/cues/4/recall']);
+  assert.equal(new Set(c2.items.map((i) => i.address)).size, 2, 'keine doppelten Adressen');
+});
+
+test('addressesOf sammelt alle belegten Adressen', () => {
+  const w = makeWidget('bank', { address: '/a', items: [{ label: '', address: '/b', value: 0 }] });
+  const set = addressesOf([w]);
+  assert.ok(set.has('/a') && set.has('/b'));
+});
+
+test('placeCopy legt die Kopie neben das Original', () => {
+  const a = makeWidget('fader', { gx: 0, gy: 0, cw: 3, ch: 6 });
+  const list = [a];
+  const copy = copyWidget(a, list);
+  list.push(copy);
+  placeCopy(list, 12, copy, a);
+  assert.deepEqual({ gx: copy.gx, gy: copy.gy }, { gx: 3, gy: 0 });
+  assert.ok(!overlaps(a, copy));
+});
+
+test('placeCopy weicht aus, wenn daneben und darunter belegt ist', () => {
+  const a = makeWidget('fader', { gx: 0, gy: 0, cw: 6, ch: 6 });
+  const b = makeWidget('fader', { gx: 6, gy: 0, cw: 6, ch: 6 });
+  const c = makeWidget('fader', { gx: 0, gy: 6, cw: 12, ch: 6 });
+  const list = [a, b, c];
+  const copy = copyWidget(a, list);
+  list.push(copy);
+  placeCopy(list, 12, copy, a);
+  for (const other of [a, b, c]) assert.ok(!overlaps(copy, other), 'die Kopie liegt frei');
+});
+
+test('Mindestgroessen erlauben kleine Kacheln', () => {
+  assert.deepEqual(minSize('toggle'), { cw: 1, ch: 1 });
+  assert.ok(minSize('knob').cw <= 2 && minSize('knob').ch <= 2);
+  const w = normalizeWidget({ type: 'toggle', cw: 1, ch: 1 });
+  assert.deepEqual({ cw: w.cw, ch: w.ch }, { cw: 1, ch: 1 });
+});
+
+test('die Bank kennt den Poti-Modus', () => {
+  assert.equal(normalizeWidget({ type: 'bank', bankMode: 'knob' }).bankMode, 'knob');
+  assert.equal(normalizeWidget({ type: 'bank', bankMode: 'quatsch' }).bankMode, 'momentary');
 });

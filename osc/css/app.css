@@ -127,6 +127,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   border-radius: var(--radius);
   background: var(--card);
   overflow: hidden;
+  /* Die Kachel misst sich selbst: die Bauteile darin richten sich danach
+     (Kopfzeile, Schriftgroessen). So bleibt auch eine winzige Kachel lesbar. */
+  container: tile / size;
 }
 .tile-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; min-width: 0; }
 .tile-name {
@@ -163,18 +166,34 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   border-radius: 5px; padding: 1px 5px;
 }
 
-/* Poti */
-.knob { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; touch-action: none; }
-.knob svg { height: 100%; max-height: 100%; width: auto; aspect-ratio: 1; display: block; overflow: visible; }
+/* Poti — das SVG skaliert selbst mit und bleibt dabei mittig (kein Abschneiden) */
+.knob { flex: 1 1 auto; min-width: 0; min-height: 0; display: block; touch-action: none; }
+.knob svg { width: 100%; height: 100%; display: block; }
 .k-bg { fill: #0a0e14; stroke: var(--line); stroke-width: 2; }
+.k-track { fill: none; stroke: #1c2432; stroke-width: 6; stroke-linecap: round; }
 .k-arc { fill: none; stroke: var(--c); stroke-width: 6; stroke-linecap: round; }
 .k-ptr { stroke: var(--c); stroke-width: 5; stroke-linecap: round; }
 .knob.fine .k-ptr { stroke: #fff; }
 
+/* Bank aus Potis: je Zelle ein kleines Poti mit Beschriftung darunter.
+   Das Poti bleibt quadratisch und so gross wie die Zelle zulaesst — Poti und
+   Beschriftung stehen dadurch als Paar in der Mitte. */
+.pads.knobs { gap: 4px; }
+.kcell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 0; min-height: 0; gap: 2px;
+}
+.kcell .knob.mini { flex: 0 1 auto; width: 100%; height: auto; max-height: 100%; aspect-ratio: 1; }
+.kcap {
+  flex: 0 0 auto; max-width: 100%;
+  font-size: .68rem; color: var(--muted); line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
 /* Taster / Schalter / Bank */
 .pad {
   flex: 1 1 auto;
-  min-height: 34px;
+  min-width: 0; min-height: 0;
   display: grid; place-items: center;
   border: 1.5px solid var(--c);
   border-radius: 9px;
@@ -186,7 +205,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   overflow: hidden;
   touch-action: none;
 }
-.pad.small { font-size: .85rem; min-height: 0; }
+.pad.small { font-size: .85rem; }
+/* Einzelner Taster fuellt die Kachel — die Schrift darf mitwachsen. */
+.t-toggle .pad, .t-button .pad { font-size: clamp(.7rem, 22cqh, 1.05rem); }
 .tile.on .pad, .pad.on { background: var(--c); color: #06121b; }
 .pads { flex: 1 1 auto; min-height: 0; display: grid; gap: 5px; grid-auto-rows: minmax(0, 1fr); }
 
@@ -220,11 +241,32 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 
 /* Text / Anzeige */
 .label-text { flex: 1 1 auto; display: flex; align-items: center; font-weight: 650; font-size: .95rem; line-height: 1.15; word-break: break-word; }
+.label-text { font-size: clamp(.75rem, 42cqh, 1.15rem); }
 .label-text[style*="center"] { justify-content: center; }
 .label-text[style*="right"] { justify-content: flex-end; }
 .meter-val { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; margin-bottom: 6px; word-break: break-word; }
+.meter-val { font-size: clamp(.85rem, 26cqh, 1.6rem); }
 .meter-bar { height: 8px; border-radius: 999px; background: #0a0e14; border: 1px solid var(--line); overflow: hidden; }
 .meter-fill { height: 100%; background: var(--c); transition: width .12s linear; }
+
+/* Winzige Kacheln: lieber das Bauteil zeigen als die Beschriftung.
+   Ohne Container-Queries bleibt einfach alles sichtbar — kein Beinbruch. */
+@container tile (max-height: 58px) {
+  .tile-head { display: none; }
+}
+@container tile (max-width: 78px) {
+  .tile-name { display: none; }
+  .tile-val { flex: 1 1 auto; text-align: center; }
+}
+@container tile (max-height: 90px) {
+  .pad.small { font-size: .74rem; }
+}
+@container tile (max-height: 40px) {
+  .kcap { display: none; }
+}
+@container tile (max-width: 54px) {
+  .kcap { display: none; }
+}
 
 /* ---------------------------------------------------- Bearbeiten-Modus -- */
 .surface.editing .tile-body,
@@ -263,6 +305,22 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   display: grid; gap: 8px;
 }
 .edithint { margin: 0; font-size: .74rem; color: var(--muted); line-height: 1.35; }
+/* Leiste zum gewaehlten Bauteil: Einstellungen, Duplizieren, Loeschen */
+.selrow {
+  border: 1px solid var(--accent); border-radius: 10px;
+  background: #0f2432; padding: 6px 8px; gap: 6px;
+}
+.selrow { flex-wrap: nowrap; }
+.selrow .btn { min-height: 38px; padding: 0 12px; }
+/* Quadratische Symbolknoepfe (Rueckgaengig, Duplizieren, Loeschen) */
+.editbar .btn.sq { flex: 0 0 auto; width: 44px; padding: 0; display: grid; place-items: center; }
+.editbar .btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.editbar.has-sel .edithint { display: none; }
+.selname {
+  flex: 1 1 auto; min-width: 0;
+  font-size: .82rem; font-weight: 650;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .editrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .editrow .grow { flex: 1 1 auto; }
 .stepper { display: flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); overflow: hidden; }
@@ -303,6 +361,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   font: inherit; font-weight: 600; font-size: .9rem;
 }
 .btn:active { filter: brightness(1.25); }
+.btn:disabled { opacity: .38; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #04202e; }
 .btn.ghost { background: transparent; }
 .btn.danger { color: #fca5a5; border-color: #7f1d1d; }
@@ -323,7 +382,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 input[type=checkbox] { width: 22px; height: 22px; min-height: 0; accent-color: var(--accent); }
 input[type=color] { padding: 2px; height: 42px; }
 .check { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: .9rem; }
-.sel { width: auto; min-width: 140px; }
+/* Auswahlfeld in einer Zeile neben Knoepfen. Der Name ist bewusst nicht
+   „sel": so heisst die ausgewaehlte Kachel — und `min-width` hat sie frueher
+   im Raster aufgeblaeht, sodass sie ihre Nachbarn ueberdeckte. */
+.selectbox { width: auto; min-width: 140px; }
 .note { margin: 6px 0 0; font-size: .8rem; color: var(--muted); }
 .muted { color: var(--muted); }
 .prose p { margin: 0 0 10px; font-size: .88rem; line-height: 1.5; }
@@ -347,7 +409,6 @@ input[type=color] { padding: 2px; height: 42px; }
   content: "›"; position: absolute; right: 15px; top: 50%; transform: translateY(-52%);
   color: var(--muted); font-size: 1.35rem; line-height: 1;
 }
-#pickList .menuitem::after { content: "+"; font-size: 1.15rem; }
 .menuitem:active { border-color: var(--accent); }
 .mi-t { font-weight: 650; font-size: .97rem; }
 .mi-s { font-size: .79rem; color: var(--muted); line-height: 1.3; }
@@ -378,6 +439,54 @@ input[type=color] { padding: 2px; height: 42px; }
 
 .itemrow { display: grid; grid-template-columns: 1fr 1fr 80px 34px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .itemrow input { min-height: 38px; }
+
+/* ------------------------------------------------- Bauteil-Auswahl (Raster) */
+.pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.pico {
+  display: grid; gap: 6px; justify-items: center; align-content: center;
+  min-height: 86px; padding: 10px 6px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  color: var(--text); font: inherit;
+}
+.pico svg {
+  width: 30px; height: 30px;
+  fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.pico-t { font-size: .82rem; font-weight: 650; }
+.pico:active { border-color: var(--accent); background: #0f2432; }
+
+/* ------------------------------------------------------- Inspektor-Reiter -- */
+.tabs {
+  display: flex; gap: 4px; padding: 3px;
+  border: 1px solid var(--line); border-radius: 12px; background: #0a0e14;
+  position: sticky; top: 0; z-index: 2;
+}
+.tab {
+  flex: 1 1 0; min-width: 0; min-height: 38px;
+  border: 0; border-radius: 9px; background: transparent;
+  color: var(--muted); font: inherit; font-size: .85rem; font-weight: 650;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tab.on { background: var(--card-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.tabpanel { padding-top: 4px; }
+
+/* Im Inspektor sitzt alles enger — moeglichst ohne Scrollen. */
+.insp .field { margin: 8px 0 0; }
+.insp .field > span, .fieldlabel { font-size: .78rem; color: var(--muted); }
+.fieldlabel { display: block; margin: 12px 0 5px; }
+.insp .note { margin-top: 10px; }
+.insp .swatches { margin: 0; gap: 6px; }
+.insp .swatches .iconbtn { width: 30px; height: 30px; border-width: 2px; }
+.insp h3 { margin: 12px 0 6px; }
+.inspactions { margin: 14px 0 0; gap: 8px; }
+.inspactions .btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.inspactions .btn.grow { flex: 1 1 auto; }
+.inspactions svg {
+  width: 18px; height: 18px; flex: 0 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.stepper.wide { width: 100%; justify-content: space-between; }
+.stepper.wide .stepval { flex: 1 1 auto; text-align: center; font-size: 1rem; color: var(--text); font-variant-numeric: tabular-nums; }
 
 @media (min-width: 700px) {
   :root { --gap: 10px; }

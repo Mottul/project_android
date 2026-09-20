@@ -41,8 +41,17 @@
 
 <!-- Werkzeugleiste im Bearbeiten-Modus -->
 <div class="editbar" id="editbar" hidden>
-  <p class="edithint">Kachel ziehen = verschieben · Ecke unten rechts = Groesse · antippen = Einstellungen</p>
+  <div class="editrow selrow" id="selRow" hidden>
+    <span class="selname" id="selName"></span>
+    <button class="btn" id="btnSelEdit">Einstellungen</button>
+    <button class="btn sq" id="btnSelDup" aria-label="Duplizieren" title="Duplizieren"></button>
+    <button class="btn sq danger" id="btnSelDel" aria-label="Loeschen" title="Loeschen"></button>
+  </div>
+  <p class="edithint">Tippen = auswaehlen · nochmal tippen = Einstellungen · ziehen = verschieben ·
+    Ecke unten rechts = Groesse · lang druecken = hier einfuegen · ↶ ↷ = Schritt zurueck/vor</p>
   <div class="editrow">
+    <button class="btn sq" id="btnUndo" aria-label="Rueckgaengig" title="Rueckgaengig" disabled></button>
+    <button class="btn sq" id="btnRedo" aria-label="Wiederherstellen" title="Wiederherstellen" disabled></button>
     <button class="btn primary grow" id="btnAdd">+ Bauteil</button>
     <button class="btn" id="btnArrange">Aufraeumen</button>
     <span class="stepper" role="group" aria-label="Raster">
@@ -79,7 +88,7 @@
     <div id="pageList" class="list"></div>
     <div class="row wrap">
       <button class="btn" id="btnAddPage">Leere Seite</button>
-      <select id="selPreset" class="sel" aria-label="Vorlage"></select>
+      <select id="selPreset" class="selectbox" aria-label="Vorlage"></select>
       <button class="btn" id="btnAddPreset">Vorlage anlegen</button>
     </div>
 
@@ -196,7 +205,7 @@
     <h3>Diese Seite</h3>
     <p class="note" id="resetPageInfo"></p>
     <div class="row wrap">
-      <select id="selResetPreset" class="sel" aria-label="Vorlage"></select>
+      <select id="selResetPreset" class="selectbox" aria-label="Vorlage"></select>
       <button class="btn" id="btnResetPage">Seite ersetzen</button>
     </div>
 
@@ -223,22 +232,36 @@
       Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.</p>
     <p><b>Live bedienen.</b> Regler ziehen relativ, ein Antippen aendert nie
       einen Wert. Seitlich ausweichen macht den Griff fein.</p>
-    <p><b>Bearbeiten.</b> Kachel ziehen verschiebt sie, die Ecke unten rechts
-      zieht sie auf, kurzes Antippen oeffnet die Einstellungen des Bauteils.
-      Liegt am Zielplatz schon etwas, weicht es nach unten aus.</p>
+    <p><b>Bearbeiten.</b> Der erste Tipp waehlt eine Kachel aus — unten
+      erscheint eine Leiste mit Einstellungen, Duplizieren und Loeschen. Ein
+      zweiter Tipp auf dieselbe Kachel oeffnet die Einstellungen. Ziehen
+      verschiebt, die Ecke unten rechts zieht auf; liegt am Zielplatz schon
+      etwas, weicht es nach unten aus. Ein langer Druck auf freie Flaeche
+      fuegt genau dort ein Bauteil ein, ein kurzer Tipp ins Leere hebt nur die
+      Auswahl auf.</p>
+    <p><b>Rueckgaengig.</b> Die Schaltflaechen ↶ und ↷ unten links nehmen
+      Schritte zurueck und wieder vor — verschieben, Groesse, einfuegen,
+      loeschen, duplizieren, aufraeumen, Spalten und Einstellungen. Was
+      drankommt, steht in der Beschriftung der Schaltflaeche. Sobald man nach
+      einem Zurueck etwas Neues aendert, endet der Faden nach vorn. Der
+      Verlauf gilt der laufenden Sitzung im Bearbeiten-Modus; die Stellung der
+      Regler bleibt davon unberuehrt.</p>
+    <p><b>Duplizieren.</b> Die Kopie zaehlt Beschriftung und Adresse hoch —
+      aus <code>/cues/1/recall</code> wird <code>/cues/2/recall</code>. So
+      entstehen keine zwei Bauteile auf derselben Adresse.</p>
   </div>
 </section>
 
 <!-- ====================================================== Bauteil einfuegen -->
 <section class="sheet" id="sheetPick" hidden aria-label="Bauteil einfuegen">
   <div class="sheet-head"><h2>Bauteil einfuegen</h2><button class="btn ghost" data-close>Abbrechen</button></div>
-  <div class="sheet-body"><div class="menu" id="pickList"></div></div>
+  <div class="sheet-body"><div class="pickgrid" id="pickList"></div></div>
 </section>
 
 <!-- ============================================================= Inspektor -->
 <section class="sheet" id="sheetInsp" hidden aria-label="Bauteil">
   <div class="sheet-head"><h2 id="inspTitle">Bauteil</h2><button class="btn ghost" data-close>Fertig</button></div>
-  <div class="sheet-body" id="inspBody"></div>
+  <div class="sheet-body insp" id="inspBody"></div>
 </section>
 
 <script type="module" src="./js/app.js"></script>
