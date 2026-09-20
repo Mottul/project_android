@@ -37,10 +37,11 @@ verschiebt, die **Ecke unten rechts** zieht auf. Ein Tipp ins Leere hebt nur
 die Auswahl auf; wer **lange auf eine freie Stelle drueckt**, bekommt die
 Bauteil-Auswahl und das neue Bauteil landet genau dort.
 
-**↶ nimmt den letzten Schritt zurueck** — verschieben, Groesse, einfuegen,
-loeschen, duplizieren, aufraeumen, Spalten und Einstellungen; am Rechner auch
-mit `Strg`/`Cmd` + `Z`. Die Schaltflaeche nennt jeweils den Schritt, der
-drankommt. Der Verlauf gilt der laufenden Sitzung im Bearbeiten-Modus: beim
+**↶ und ↷ nehmen Schritte zurueck und wieder vor** — verschieben, Groesse,
+einfuegen, loeschen, duplizieren, aufraeumen, Spalten und Einstellungen; am
+Rechner auch mit `Strg`/`Cmd` + `Z` und `Strg`/`Cmd` + `Umschalt` + `Z`
+(oder `Strg` + `Y`). Die Schaltflaechen nennen jeweils den Schritt, der
+drankommt; eine neue Aenderung beendet den Faden nach vorn. Der Verlauf gilt der laufenden Sitzung im Bearbeiten-Modus: beim
 Verlassen, beim Seitenwechsel und bei einem neuen Projekt faengt er von vorn
 an. Die Stellung der Regler bleibt dabei unangetastet — zurueck geht der
 Aufbau, nicht das Pult.

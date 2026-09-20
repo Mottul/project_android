@@ -48,10 +48,10 @@
     <button class="btn sq danger" id="btnSelDel" aria-label="Loeschen" title="Loeschen"></button>
   </div>
   <p class="edithint">Tippen = auswaehlen · nochmal tippen = Einstellungen · ziehen = verschieben ·
-    Ecke unten rechts = Groesse · lange auf freie Flaeche druecken = hier einfuegen ·
-    ↶ nimmt den letzten Schritt zurueck</p>
+    Ecke unten rechts = Groesse · lang druecken = hier einfuegen · ↶ ↷ = Schritt zurueck/vor</p>
   <div class="editrow">
     <button class="btn sq" id="btnUndo" aria-label="Rueckgaengig" title="Rueckgaengig" disabled></button>
+    <button class="btn sq" id="btnRedo" aria-label="Wiederherstellen" title="Wiederherstellen" disabled></button>
     <button class="btn primary grow" id="btnAdd">+ Bauteil</button>
     <button class="btn" id="btnArrange">Aufraeumen</button>
     <span class="stepper" role="group" aria-label="Raster">
@@ -239,11 +239,13 @@
       etwas, weicht es nach unten aus. Ein langer Druck auf freie Flaeche
       fuegt genau dort ein Bauteil ein, ein kurzer Tipp ins Leere hebt nur die
       Auswahl auf.</p>
-    <p><b>Rueckgaengig.</b> Die Schaltflaeche ↶ unten links nimmt den letzten
-      Schritt zurueck — verschieben, Groesse, einfuegen, loeschen, duplizieren,
-      aufraeumen, Spalten und Einstellungen. Was drankommt, steht in der
-      Beschriftung der Schaltflaeche. Der Verlauf gilt der laufenden Sitzung im
-      Bearbeiten-Modus; die Stellung der Regler bleibt davon unberuehrt.</p>
+    <p><b>Rueckgaengig.</b> Die Schaltflaechen ↶ und ↷ unten links nehmen
+      Schritte zurueck und wieder vor — verschieben, Groesse, einfuegen,
+      loeschen, duplizieren, aufraeumen, Spalten und Einstellungen. Was
+      drankommt, steht in der Beschriftung der Schaltflaeche. Sobald man nach
+      einem Zurueck etwas Neues aendert, endet der Faden nach vorn. Der
+      Verlauf gilt der laufenden Sitzung im Bearbeiten-Modus; die Stellung der
+      Regler bleibt davon unberuehrt.</p>
     <p><b>Duplizieren.</b> Die Kopie zaehlt Beschriftung und Adresse hoch —
       aus <code>/cues/1/recall</code> wird <code>/cues/2/recall</code>. So
       entstehen keine zwei Bauteile auf derselben Adresse.</p>

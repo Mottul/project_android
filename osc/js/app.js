@@ -182,60 +182,78 @@ function renderSurface() {
   fitRows();
 }
 
-/* --------------------------------------------------------- Rueckgaengig --- */
+/* ------------------------------------------- Rueckgaengig / Wiederherstellen */
 
 /**
- * Rueckgaengig gilt dem AUFBAU im Bearbeiten-Modus: verschieben, Groesse,
- * anlegen, loeschen, duplizieren, aufraeumen, Spalten, Einstellungen.
+ * Zurueck und wieder vor gelten dem AUFBAU im Bearbeiten-Modus: verschieben,
+ * Groesse, anlegen, loeschen, duplizieren, aufraeumen, Spalten, Einstellungen.
  *
  * Gemerkt wird jeweils die ganze Seite als Text — bei den paar Dutzend
  * Bauteilen einer Seite ist das billiger als Buch ueber einzelne Aenderungen
- * zu fuehren, und es kann nichts auseinanderlaufen.
+ * zu fuehren, und es kann nichts auseinanderlaufen. Beide Richtungen nutzen
+ * denselben Weg: der Schritt wandert von einem Stapel auf den anderen, und
+ * was gerade dasteht, geht als Gegenstueck mit.
  *
- * Der Stapel gilt nur fuer die laufende Sitzung im Bearbeiten-Modus: beim
- * Verlassen, beim Seitenwechsel und bei einem neuen Projekt wird er geleert.
- * Sonst koennte ein Schritt zurueck einen Stand wiederherstellen, der mit dem,
- * was inzwischen live passiert ist, nichts mehr zu tun hat.
+ * Die Stapel gelten nur fuer die laufende Sitzung im Bearbeiten-Modus: beim
+ * Verlassen, beim Seitenwechsel und bei einem neuen Projekt werden sie
+ * geleert. Sonst koennte ein Schritt zurueck einen Stand wiederherstellen,
+ * der mit dem, was inzwischen live passiert ist, nichts mehr zu tun hat.
  */
 const UNDO_MAX = 30;
 let undoStack = [];
+let redoStack = [];
 
 /** Live-Werte: die gehoeren dem Pult, nicht dem Aufbau — sie bleiben stehen. */
 const LIVE_KEYS = ['value', 'x', 'y', 'r', 'g', 'b', 'a', 'text'];
 
 const snapshotPage = () => JSON.stringify(currentPage());
 
-/** Einen Schritt merken. `snap` erlaubt einen frueher genommenen Stand. */
+/**
+ * Einen Schritt merken. `snap` erlaubt einen frueher genommenen Stand.
+ * Jede neue Aenderung beendet den Faden nach vorn — wie ueberall sonst auch.
+ */
 function pushUndo(label, snap = snapshotPage()) {
   undoStack.push({ pageId: currentPage().id, label, snap });
   if (undoStack.length > UNDO_MAX) undoStack.shift();
-  paintUndo();
+  redoStack = [];
+  paintHistory();
 }
 
 function clearUndo() {
   undoStack = [];
-  paintUndo();
+  redoStack = [];
+  paintHistory();
 }
 
-function paintUndo() {
-  const b = $('#btnUndo');
-  if (!b) return;
-  const top = undoStack[undoStack.length - 1];
-  b.disabled = !top;
-  const text = top ? `Rueckgaengig: ${top.label}` : 'Rueckgaengig';
-  b.setAttribute('aria-label', text);
-  b.title = text;
+function paintHistory() {
+  const set = (sel, stack, word) => {
+    const b = $(sel);
+    if (!b) return;
+    const top = stack[stack.length - 1];
+    b.disabled = !top;
+    const text = top ? `${word}: ${top.label}` : word;
+    b.setAttribute('aria-label', text);
+    b.title = text;
+  };
+  set('#btnUndo', undoStack, 'Rueckgaengig');
+  set('#btnRedo', redoStack, 'Wiederherstellen');
 }
 
-/** Einen Schritt zurueck. */
-function undo() {
-  const step = undoStack.pop();
-  paintUndo();
-  if (!step) return;
+/**
+ * Einen Schritt von `from` nach `to` gehen: den gemerkten Stand herstellen
+ * und den jetzigen als Gegenstueck ablegen.
+ */
+function stepHistory(from, to) {
+  const step = from.pop();
+  if (!step) { paintHistory(); return; }
   const i = project.pages.findIndex((p) => p.id === step.pageId);
-  if (i < 0) return;
+  if (i < 0) { paintHistory(); return; }
 
-  const live = new Map(project.pages[i].widgets.map((w) => [w.id, w]));
+  const current = project.pages[i];
+  to.push({ pageId: step.pageId, label: step.label, snap: JSON.stringify(current) });
+  if (to.length > UNDO_MAX) to.shift();
+
+  const live = new Map(current.widgets.map((w) => [w.id, w]));
   const page = normalizePage(JSON.parse(step.snap));
   for (const w of page.widgets) {
     const now = live.get(w.id);
@@ -246,12 +264,16 @@ function undo() {
   project.currentPageId = page.id;
 
   persist();
+  paintHistory();
   renderTabs();
-  $('#colOut').textContent = page.columns;   // „Spalten" kann mit zurueckgehen
+  $('#colOut').textContent = page.columns;   // „Spalten" kann mitgehen
   renderSurface();
   setSelection(page.widgets.some((w) => w.id === selectedId) ? selectedId : null);
   try { navigator.vibrate?.(12); } catch { /* egal */ }
 }
+
+const undo = () => stepHistory(undoStack, redoStack);
+const redo = () => stepHistory(redoStack, undoStack);
 
 /* -------------------------------------------------------------- Auswahl --- */
 
@@ -307,7 +329,7 @@ function setMode(next) {
   renderSurface();
   setSelection(on ? selectedId : null);
   if (!on) { clearUndo(); closeSheet(); }
-  else paintUndo();
+  else paintHistory();
 }
 
 /** Bauteil anlegen — an der gemerkten Stelle, sonst am ersten freien Platz. */
@@ -603,13 +625,17 @@ function bind() {
   /* Auswahl-Leiste: gilt fuer das gerade gewaehlte Bauteil */
   $('#btnUndo').append(uiIcon('undo'));
   $('#btnUndo').addEventListener('click', undo);
-  // Am Rechner das gewohnte Kuerzel — am Handy reicht die Schaltflaeche.
+  $('#btnRedo').append(uiIcon('redo'));
+  $('#btnRedo').addEventListener('click', redo);
+  // Am Rechner die gewohnten Kuerzel — am Handy reichen die Schaltflaechen.
+  // Im Eingabefeld hat das Zurueck des Browsers Vorrang.
   window.addEventListener('keydown', (ev) => {
-    if (mode !== 'edit' || ev.key !== 'z' || !(ev.ctrlKey || ev.metaKey) || ev.shiftKey) return;
+    if (mode !== 'edit' || !(ev.ctrlKey || ev.metaKey)) return;
     const t = ev.target;
     if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
-    ev.preventDefault();
-    undo();
+    const key = ev.key.toLowerCase();
+    if (key === 'z' && !ev.shiftKey) { ev.preventDefault(); undo(); }
+    else if (key === 'y' || (key === 'z' && ev.shiftKey)) { ev.preventDefault(); redo(); }
   });
 
   $('#btnSelDup').append(uiIcon('copy'));
