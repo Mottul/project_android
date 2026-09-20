@@ -3,7 +3,7 @@
  * Bei Aenderungen an den Dateien CACHE hochzaehlen — alte Caches werden
  * beim Aktivieren geloescht.
  */
-const CACHE = 'oscpad-v1.1.0';
+const CACHE = 'oscpad-v1.2.0';
 
 const SHELL = [
   './',
@@ -18,6 +18,7 @@ const SHELL = [
   './js/store.js',
   './js/widgets.js',
   './js/editor.js',
+  './js/icons.js',
   './bridge/osc-bridge.mjs',
   './bridge/LIESMICH.txt',
   './icons/icon.svg',

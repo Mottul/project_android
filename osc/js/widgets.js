@@ -89,11 +89,104 @@ function tick(ms = 12) {
   try { navigator.vibrate?.(ms); } catch { /* egal */ }
 }
 
+/* ---------------------------------------------------------------- Poti --- */
+
+/* Der Bogen laeuft von links unten (0) ueber oben nach rechts unten (1). */
+const KNOB_START = -135;   // Grad, 0 = zwoelf Uhr
+const KNOB_SWEEP = 270;    // Grad zwischen Minimum und Maximum
+
+const f1 = (n) => n.toFixed(1);
+
+/** Punkt auf dem Kreis um die Mitte (50/50). */
+function knobPoint(deg, r) {
+  const a = (deg - 90) * Math.PI / 180;
+  return [50 + r * Math.cos(a), 50 + r * Math.sin(a)];
+}
+
+/**
+ * Kreisbogen von `from` nach `to` (Grad).
+ * Das grosse Bogenstueck gilt ab 180 Grad — nicht ab der halben Strecke;
+ * genau daran lag der Bogen, der bei etwa der Haelfte falsch herum lief.
+ */
+function arcPath(from, to, r) {
+  const [sx, sy] = knobPoint(from, r);
+  const [ex, ey] = knobPoint(to, r);
+  const large = Math.abs(to - from) > 180 ? 1 : 0;
+  const sweep = to >= from ? 1 : 0;
+  return `M ${f1(sx)} ${f1(sy)} A ${r} ${r} 0 ${large} ${sweep} ${f1(ex)} ${f1(ey)}`;
+}
+
+/** Voller Ring — Hintergrund des Endlos-Encoders. */
+function ringPath(r) {
+  const [tx, ty] = knobPoint(0, r);
+  const [bx, by] = knobPoint(180, r);
+  return `M ${f1(tx)} ${f1(ty)} A ${r} ${r} 0 1 1 ${f1(bx)} ${f1(by)} A ${r} ${r} 0 1 1 ${f1(tx)} ${f1(ty)}`;
+}
+
+/**
+ * Bogen fuer eine Stellung 0..1 — ausgelagert, damit er pruefbar bleibt.
+ * Bei 0 bleibt er leer, sonst laeuft er vom Minimum bis zur Stellung.
+ */
+export function knobArcPath(n, r = 38) {
+  const v = clamp01(n);
+  return v <= 0.001 ? '' : arcPath(KNOB_START, KNOB_START + v * KNOB_SWEEP, r);
+}
+
+/**
+ * Ein Poti zeichnen — von der einzelnen Kachel und von der Poti-Bank genutzt.
+ * Das SVG skaliert ueber `preserveAspectRatio` mit und bleibt dabei mittig,
+ * egal wie hoch oder schmal die Kachel ist.
+ */
+function makeKnob(cls = 'knob') {
+  const wrap = el('div', cls);
+  wrap.innerHTML =
+    '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
+    '<circle class="k-bg" cx="50" cy="50" r="38"/>' +
+    '<path class="k-track" d=""/>' +
+    '<path class="k-arc" d=""/>' +
+    '<line class="k-ptr" x1="50" y1="50" x2="50" y2="18"/>' +
+    '</svg>';
+  const track = wrap.querySelector('.k-track');
+  const arc = wrap.querySelector('.k-arc');
+  const ptr = wrap.querySelector('.k-ptr');
+  const aim = (deg) => {
+    const [px, py] = knobPoint(deg, 34);
+    ptr.setAttribute('x2', f1(px));
+    ptr.setAttribute('y2', f1(py));
+  };
+  return {
+    el: wrap,
+    /** Stellung 0..1 auf dem 270-Grad-Bogen. */
+    value(n) {
+      const v = clamp01(n);
+      const deg = KNOB_START + v * KNOB_SWEEP;
+      aim(deg);
+      track.setAttribute('d', arcPath(KNOB_START, KNOB_START + KNOB_SWEEP, 38));
+      arc.setAttribute('d', knobArcPath(v));
+    },
+    /** Endlos-Encoder: freie Drehung, `turns` = Umdrehungen. */
+    spin(turns) {
+      const deg = turns * 360;
+      aim(deg);
+      // Voller Ring statt Skala — und eine Marke, die mitwandert. So sieht man
+      // sofort, dass sich etwas dreht, obwohl es kein Anfang und kein Ende gibt.
+      track.setAttribute('d', ringPath(38));
+      arc.setAttribute('d', arcPath(deg - 24, deg + 24, 38));
+    },
+  };
+}
+
+/** Spaltenzahl einer Bank/Auswahl (0 = automatisch moeglichst quadratisch). */
+function bankCols(w) {
+  if (w.cols > 0) return w.cols;
+  return Math.min(4, Math.max(1, Math.ceil(Math.sqrt(w.items.length || 1))));
+}
+
 /**
  * Baut ein Bedienelement.
  * @param {object} w    Widget-Daten (wird bei Aenderungen mutiert)
  * @param {object} ctx  { send(address,args,now), commit(), live }
- * @returns {{el:HTMLElement, paint():void, feedback(args,types):void, busy():boolean}}
+ * @returns {{el:HTMLElement, paint():void, feedback(args,types,address):void, busy():boolean}}
  */
 export function createWidget(w, ctx) {
   const tile = el('div', `tile t-${w.type}`);
@@ -158,42 +251,34 @@ export function createWidget(w, ctx) {
 
   /* -------------------------------------------------------------- Poti --- */
   if (w.type === 'knob') {
-    const wrap = el('div', 'knob');
-    wrap.innerHTML =
-      '<svg viewBox="0 0 100 100" aria-hidden="true">' +
-      '<circle class="k-bg" cx="50" cy="50" r="38"/>' +
-      '<path class="k-arc" d="" />' +
-      '<line class="k-ptr" x1="50" y1="50" x2="50" y2="18"/>' +
-      '</svg>';
-    body.append(wrap);
-    const arc = wrap.querySelector('.k-arc');
-    const ptr = wrap.querySelector('.k-ptr');
-    let acc = 0;
+    const knob = makeKnob();
+    body.append(knob.el);
+    const STEP = 0.08;   // Zieh-Weg je Schritt beim Endlos-Encoder
+    let acc = 0;         // Rest bis zum naechsten Schritt
+    let spin = 0;        // Zeigerstellung des Endlos-Encoders (Umdrehungen)
+    let steps = 0;       // Schritte der laufenden Bewegung — als Rueckmeldung
 
-    const polar = (n, r) => {
-      const a = (-135 + n * 270 - 90) * Math.PI / 180;
-      return [50 + r * Math.cos(a), 50 + r * Math.sin(a)];
-    };
     api.paint = () => {
-      const n = w.endless ? 0.5 : norm(w, w.value);
-      const [px, py] = polar(n, 34);
-      ptr.setAttribute('x2', px.toFixed(1));
-      ptr.setAttribute('y2', py.toFixed(1));
-      if (w.endless) { arc.setAttribute('d', ''); val.textContent = '∞'; return; }
-      const [sx, sy] = polar(0, 38);
-      const [ex, ey] = polar(n, 38);
-      arc.setAttribute('d', n <= 0.001 ? '' : `M ${sx.toFixed(1)} ${sy.toFixed(1)} A 38 38 0 ${n > 0.5 ? 1 : 0} 1 ${ex.toFixed(1)} ${ey.toFixed(1)}`);
+      if (w.endless) {
+        knob.spin(spin);
+        val.textContent = steps === 0 ? '∞' : `∞ ${steps > 0 ? '+' : '−'}${Math.abs(steps)}`;
+        return;
+      }
+      knob.value(norm(w, w.value));
       val.textContent = fmt(w.value);
     };
-    drag(wrap, {
+    drag(knob.el, {
       axis: 'y',
-      onStart: () => { touching = true; acc = 0; },
+      onStart: () => { touching = true; acc = 0; steps = 0; },
       onMove: (dx, dy, fine) => {
         const d = -dy / 160 * fine;
         if (w.endless) {
+          // Der Zeiger dreht mit der Hand, die Schritte gehen einzeln raus.
+          spin += d;
           acc += d;
-          while (acc >= 0.08) { acc -= 0.08; send(w.address, [{ type: 'i', value: 1 }], true); }
-          while (acc <= -0.08) { acc += 0.08; send(w.address, [{ type: 'i', value: -1 }], true); }
+          while (acc >= STEP) { acc -= STEP; steps += 1; send(w.address, [{ type: 'i', value: 1 }], true); }
+          while (acc <= -STEP) { acc += STEP; steps -= 1; send(w.address, [{ type: 'i', value: -1 }], true); }
+          api.paint();
           return;
         }
         w.value = clamp(w.value + d * span(w), lo(w), hi(w));
@@ -263,13 +348,64 @@ export function createWidget(w, ctx) {
     };
   }
 
+  /* ---------------------------------------------------- Bank aus Potis --- */
+  if (w.type === 'bank' && w.bankMode === 'knob') {
+    const grid = el('div', 'pads knobs');
+    grid.style.gridTemplateColumns = `repeat(${bankCols(w)}, minmax(0,1fr))`;
+    body.append(grid);
+    const cells = [];
+
+    const paintCell = (i) => {
+      const c = cells[i];
+      if (!c) return;
+      c.knob.value(norm(w, c.item.value));
+      c.cap.textContent = c.item.label || String(i + 1);
+    };
+
+    w.items.forEach((item, i) => {
+      const cell = el('div', 'kcell');
+      const knob = makeKnob('knob mini');
+      const cap = el('span', 'kcap');
+      cell.append(knob.el, cap);
+      grid.append(cell);
+      cells.push({ knob, cap, item });
+      // Ohne eigene Adresse geht der Eintrag an die Adresse des Bauteils.
+      const addr = () => item.address || w.address;
+      drag(knob.el, {
+        axis: 'y',
+        onStart: () => { touching = true; },
+        onMove: (dx, dy, fine) => {
+          item.value = clamp(item.value + (-dy / 160) * fine * span(w), lo(w), hi(w));
+          paintCell(i);
+          val.textContent = `${item.label || i + 1} · ${fmt(item.value)}`;
+          send(addr(), [arg(w, item.value)]);
+        },
+        onEnd: (moved) => {
+          touching = false;
+          if (!moved) return;
+          send(addr(), [arg(w, item.value)], true);
+          ctx.commit();
+        },
+      });
+    });
+
+    api.paint = () => { cells.forEach((c, i) => paintCell(i)); };
+    api.feedback = (args, types, address) => {
+      if (touching || typeof args[0] !== 'number') return;
+      cells.forEach((c, i) => {
+        if ((c.item.address || w.address) !== address) return;
+        c.item.value = clamp(args[0], lo(w), hi(w));
+        paintCell(i);
+      });
+    };
+  }
+
   /* ------------------------------------------------------ Bank/Auswahl --- */
-  if (w.type === 'bank' || w.type === 'select') {
+  if ((w.type === 'bank' && w.bankMode !== 'knob') || w.type === 'select') {
     const grid = el('div', 'pads');
     body.append(grid);
     const cells = [];
-    const cols = w.cols > 0 ? w.cols : Math.min(4, Math.max(1, Math.ceil(Math.sqrt(w.items.length || 1))));
-    grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0,1fr))`;
+    grid.style.gridTemplateColumns = `repeat(${bankCols(w)}, minmax(0,1fr))`;
 
     w.items.forEach((item, i) => {
       const b = el('button', 'pad small', item.label || String(i + 1));

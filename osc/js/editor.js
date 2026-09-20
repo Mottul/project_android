@@ -3,19 +3,25 @@
  *
  * Verschoben wird im Raster — es rastet ein. Waehrend des Ziehens zeigt ein
  * Umriss, wo die Kachel landet; liegt dort schon etwas, weicht das nach unten
- * aus (sonst liesse sich auf einer vollen Seite nichts mehr umstellen). Ein
- * kurzes Antippen oeffnet den Inspektor, ein Tippen auf freie Rasterflaeche
- * legt dort ein neues Bauteil an.
+ * aus (sonst liesse sich auf einer vollen Seite nichts mehr umstellen).
+ *
+ * Antippen: der erste Tipp WAEHLT nur aus — dann liegen Duplizieren und
+ * Loeschen in der Leiste bereit; der zweite Tipp auf dieselbe Kachel oeffnet
+ * die Einstellungen. Ein Tipp ins Leere hebt die Auswahl auf und legt
+ * ausdruecklich nichts an; wer an einer bestimmten Stelle etwas einfuegen
+ * will, haelt dort kurz den Finger auf.
  *
  * Groesse: die Ecke unten rechts. Nicht nur der sichtbare Griff zaehlt, sondern
  * eine ganze Ecke — auf kleinen Kacheln entsprechend kleiner, damit Verschieben
  * moeglich bleibt.
  */
 
-import { COLORS, clamp, fits, dropAt, minSize, MAX_ROWS, uid } from './model.js';
+import { COLORS, clamp, fits, dropAt, minSize, MAX_ROWS, TYPES, bumpNumber, copyWidget } from './model.js';
+import { uiIcon } from './icons.js';
 
 const TAP_PX = 8;
 const TAP_MS = 500;
+const HOLD_MS = 420;   // so lange auf leerer Flaeche halten = hier einfuegen
 
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -27,7 +33,8 @@ const el = (tag, cls, text) => {
 /**
  * Verschieben/Groesse aendern auf der Flaeche aktivieren (einmal aufrufen).
  * @param {HTMLElement} surface
- * @param {object} cbs { getPage(), isEditing(), onChange(), onTap(widget), onSelect(id) }
+ * @param {object} cbs { getPage(), isEditing(), selectedId(), onChange(),
+ *                       onSelect(id), onOpen(widget), onEmptyHold(cell) }
  */
 export function attachEditing(surface, cbs) {
   let st = null;
@@ -46,7 +53,7 @@ export function attachEditing(surface, cbs) {
   };
   const hideGhost = () => { ghost?.remove(); ghost = null; };
 
-  /** Rasterzelle unter einem Punkt (fuer „auf freie Flaeche tippen"). */
+  /** Rasterzelle unter einem Punkt (fuers Einfuegen per langem Druck). */
   const cellAt = (ev) => {
     const page = cbs.getPage();
     const r = surface.getBoundingClientRect();
@@ -65,12 +72,20 @@ export function attachEditing(surface, cbs) {
     };
   };
 
+  const clearHold = () => { if (st?.timer) { clearTimeout(st.timer); st.timer = 0; } };
+
   surface.addEventListener('pointerdown', (ev) => {
     if (!cbs.isEditing() || st) return;
     const tile = ev.target.closest('.tile');
     if (!tile) {
-      // Leere Rasterflaeche: merken, beim Loslassen ohne Bewegung ein Bauteil anbieten.
-      st = { empty: true, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, t0: Date.now(), cell: cellAt(ev), moved: false };
+      // Leere Flaeche: kurz tippen hebt die Auswahl auf, halten fuegt hier ein.
+      const cell = cellAt(ev);
+      st = { empty: true, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, t0: Date.now(), cell, moved: false };
+      st.timer = setTimeout(() => {
+        if (!st || !st.empty || st.moved) return;
+        st.held = true;
+        cbs.onEmptyHold?.(cell);
+      }, HOLD_MS);
       return;
     }
     const page = cbs.getPage();
@@ -86,6 +101,7 @@ export function attachEditing(surface, cbs) {
     tile.setPointerCapture(ev.pointerId);
     st = {
       id: ev.pointerId, tile, w, resize,
+      wasSelected: cbs.selectedId?.() === w.id,
       x0: ev.clientX, y0: ev.clientY, t0: Date.now(),
       orig: { gx: w.gx, gy: w.gy, cw: w.cw, ch: w.ch },
       last: { gx: w.gx, gy: w.gy, cw: w.cw, ch: w.ch },
@@ -100,7 +116,7 @@ export function attachEditing(surface, cbs) {
     if (!st || ev.pointerId !== st.id) return;
     const dx = ev.clientX - st.x0;
     const dy = ev.clientY - st.y0;
-    if (st.empty) { if (Math.hypot(dx, dy) >= TAP_PX) st.moved = true; return; }
+    if (st.empty) { if (Math.hypot(dx, dy) >= TAP_PX) { st.moved = true; clearHold(); } return; }
     if (!st.moved && Math.hypot(dx, dy) < TAP_PX) return;
     if (!st.moved) { st.moved = true; st.tile.classList.add('moving'); }
 
@@ -131,12 +147,13 @@ export function attachEditing(surface, cbs) {
   const stop = (ev) => {
     if (!st || (ev && ev.pointerId !== st.id)) return;
     if (st.empty) {
-      const { moved, cell, t0 } = st;
+      const { moved, held, t0 } = st;
+      clearHold();
       st = null;
-      if (!moved && Date.now() - t0 < TAP_MS) cbs.onEmptyTap?.(cell);
+      if (!moved && !held && Date.now() - t0 < TAP_MS) cbs.onSelect?.(null);
       return;
     }
-    const { w, tile, moved, last } = st;
+    const { w, tile, moved, last, wasSelected } = st;
     try { tile.releasePointerCapture(st.id); } catch { /* egal */ }
     tile.classList.remove('moving');
     hideGhost();
@@ -146,8 +163,9 @@ export function attachEditing(surface, cbs) {
       const page = cbs.getPage();
       dropAt(page.widgets, page.columns, w, last);
       cbs.onChange();
-    } else if (quick) {
-      cbs.onTap(w);
+    } else if (quick && wasSelected) {
+      // Zweiter Tipp auf dieselbe Kachel: Einstellungen.
+      cbs.onOpen(w);
     }
   };
   surface.addEventListener('pointerup', stop);
@@ -211,8 +229,34 @@ function checkbox(label, checked, onchange) {
   return l;
 }
 
+/** Zahl mit − und + statt Tastatur — fuer Breite und Hoehe am Daumen. */
+function stepper(label, value, lo, hi, onchange) {
+  const box = el('div', 'field');
+  box.append(el('span', null, label));
+  const row = el('div', 'stepper wide');
+  const out = el('span', 'stepval');
+  const paint = (v) => { out.textContent = String(v); };
+  let v = value;
+  const set = (next) => {
+    v = clamp(Math.round(next), lo, hi);
+    paint(v);
+    onchange(v);
+  };
+  const mk = (txt, delta, aria) => {
+    const b = el('button', 'btn step', txt);
+    b.type = 'button';
+    b.setAttribute('aria-label', aria);
+    b.addEventListener('click', () => set(v + delta));
+    return b;
+  };
+  paint(v);
+  row.append(mk('−', -1, `${label} kleiner`), out, mk('+', 1, `${label} groesser`));
+  box.append(row);
+  return box;
+}
+
 function colorRow(current, onpick) {
-  const row = el('div', 'row wrap');
+  const row = el('div', 'row wrap swatches');
   for (const c of COLORS) {
     const b = el('button', 'iconbtn');
     b.type = 'button';
@@ -225,75 +269,82 @@ function colorRow(current, onpick) {
   return row;
 }
 
+/** Welcher Reiter zuletzt offen war — je Bauteil gemerkt. */
+let lastTab = { id: null, tab: 'allg' };
+
 /**
- * Inspektor fuellen.
+ * Inspektor fuellen — in Reitern, damit nichts gescrollt werden muss.
  * @param {HTMLElement} body
  * @param {object} w
  * @param {object} page
- * @param {object} cbs { onChange(), onDelete(), onDuplicate(), rerender() }
+ * @param {object} cbs { onChange(), onDelete(), onDuplicate() }
  */
 export function buildInspector(body, w, page, cbs) {
   body.replaceChildren();
-  const change = () => cbs.onChange();
+  // Die Fusszeile nennt Typ und Groesse und bleibt beim Tippen aktuell, ohne
+  // dass der ganze Inspektor neu gebaut wird (das kostete sonst den Fokus).
+  const note = el('p', 'note');
+  const syncNote = () => { note.textContent = `${TYPES[w.type].name} · ${w.cw}×${w.ch} Zellen`; };
+  const change = () => { syncNote(); cbs.onChange(); };
   const rebuild = () => { buildInspector(body, w, page, cbs); cbs.onChange(); };
 
-  const isValue = ['fader', 'knob', 'meter', 'xy'].includes(w.type);
-  const isSwitch = ['toggle', 'button', 'bank'].includes(w.type);
+  const isKnobBank = w.type === 'bank' && w.bankMode === 'knob';
+  const isValue = ['fader', 'knob', 'meter', 'xy'].includes(w.type) || isKnobBank;
+  const isSwitch = ['toggle', 'button'].includes(w.type) || (w.type === 'bank' && !isKnobBank);
   const hasItems = ['bank', 'select'].includes(w.type);
 
-  body.append(field('Beschriftung', textInput(w.label, (v) => { w.label = v; change(); })));
+  /* ------------------------------------------------------- Allgemein --- */
+  const tabAllg = (panel) => {
+    panel.append(field('Beschriftung', textInput(w.label, (v) => { w.label = v; change(); })));
+    if (w.type !== 'label') {
+      panel.append(field('OSC-Adresse', textInput(w.address, (v) => { w.address = v.trim(); change(); },
+        { placeholder: '/surfaces/1/opacity' })));
+    }
+    if (w.type === 'xy') {
+      panel.append(field('Adresse Y (leer = beide Werte an die Adresse oben)',
+        textInput(w.addressY, (v) => { w.addressY = v.trim(); change(); }, { placeholder: '/surfaces/1/position/y' })));
+    }
+    panel.append(el('span', 'fieldlabel', 'Farbe'), colorRow(w.color, (c) => { w.color = c; rebuild(); }));
+  };
 
-  if (w.type !== 'label') {
-    body.append(field('OSC-Adresse', textInput(w.address, (v) => { w.address = v.trim(); change(); }, { placeholder: '/surfaces/1/opacity' })));
-  }
-  if (w.type === 'xy') {
-    body.append(field('Adresse Y (leer = beide Werte an die Adresse oben)',
-      textInput(w.addressY, (v) => { w.addressY = v.trim(); change(); }, { placeholder: '/surfaces/1/position/y' })));
-  }
+  /* ------------------------------------------------------------ Werte --- */
+  const tabWert = (panel) => {
+    if (isValue) {
+      const g = el('div', 'grid2');
+      g.append(field('Minimum', numInput(w.min, (v) => { w.min = v; change(); })),
+               field('Maximum', numInput(w.max, (v) => { w.max = v; change(); })));
+      panel.append(g);
+    }
+    if (isSwitch || (hasItems && !isKnobBank)) {
+      const g = el('div', 'grid2');
+      g.append(field('Wert „an"', numInput(w.onValue, (v) => { w.onValue = v; change(); })),
+               field('Wert „aus"', numInput(w.offValue, (v) => { w.offValue = v; change(); })));
+      panel.append(g);
+    }
+    if (w.type !== 'label' && w.type !== 'meter') {
+      panel.append(field('Zahlentyp', selectInput(w.argType, [['f', 'Kommazahl (float)'], ['i', 'Ganzzahl (int)']],
+        (v) => { w.argType = v; change(); })));
+    }
+    if (w.type === 'knob') {
+      panel.append(checkbox('Endlos-Encoder (sendet Schritte ±1)', w.endless, (v) => { w.endless = v; rebuild(); }));
+    }
+    if (w.type === 'bank') {
+      panel.append(field('Verhalten', selectInput(w.bankMode,
+        [['momentary', 'Taster'], ['toggle', 'Schalter'], ['knob', 'Potis']],
+        (v) => { w.bankMode = v; rebuild(); })));
+    }
+    if (w.type === 'meter') {
+      panel.append(field('Anzeigen als', selectInput(w.source, [['number', 'Zahl mit Balken'], ['text', 'Text']],
+        (v) => { w.source = v; rebuild(); })));
+    }
+    if (!panel.childElementCount) panel.append(el('p', 'note', 'Dieses Bauteil hat keine Werte.'));
+  };
 
-  if (isValue) {
-    const g = el('div', 'grid2');
-    g.append(field('Minimum', numInput(w.min, (v) => { w.min = v; change(); })),
-             field('Maximum', numInput(w.max, (v) => { w.max = v; change(); })));
-    body.append(g);
-  }
-  if (isSwitch || hasItems) {
-    const g = el('div', 'grid2');
-    g.append(field('Wert „an"', numInput(w.onValue, (v) => { w.onValue = v; change(); })),
-             field('Wert „aus"', numInput(w.offValue, (v) => { w.offValue = v; change(); })));
-    body.append(g);
-  }
-  if (w.type !== 'label' && w.type !== 'meter') {
-    body.append(field('Zahlentyp', selectInput(w.argType, [['f', 'Kommazahl (float)'], ['i', 'Ganzzahl (int)']],
-      (v) => { w.argType = v; change(); })));
-  }
-
-  if (w.type === 'fader' || w.type === 'color') {
-    body.append(field('Ausrichtung', selectInput(w.orient, [['v', 'senkrecht'], ['h', 'waagerecht']],
-      (v) => { w.orient = v; rebuild(); })));
-  }
-  if (w.type === 'knob') body.append(checkbox('Endlos-Encoder (sendet Schritte ±1)', w.endless, (v) => { w.endless = v; rebuild(); }));
-  if (w.type === 'bank') {
-    body.append(field('Verhalten', selectInput(w.bankMode, [['momentary', 'Taster'], ['toggle', 'Schalter']],
-      (v) => { w.bankMode = v; rebuild(); })));
-  }
-  if (hasItems) {
-    body.append(field('Spalten (0 = automatisch)', numInput(w.cols, (v) => { w.cols = clamp(Math.round(v), 0, 12); rebuild(); }, { min: 0, max: 12, step: 1 })));
-  }
-  if (w.type === 'label') {
-    body.append(field('Ausrichtung', selectInput(w.align, [['left', 'links'], ['center', 'mittig'], ['right', 'rechts']],
-      (v) => { w.align = v; change(); })));
-  }
-  if (w.type === 'meter') {
-    body.append(field('Anzeigen als', selectInput(w.source, [['number', 'Zahl mit Balken'], ['text', 'Text']],
-      (v) => { w.source = v; rebuild(); })));
-  }
-
-  /* Eintraege von Bank und Auswahl */
-  if (hasItems) {
-    body.append(el('h3', null, 'Eintraege'));
-    const hint = el('p', 'note', 'Mit eigener Adresse sendet der Eintrag „an"/„aus" dorthin. Ohne Adresse geht sein Wert an die Adresse des Bauteils.');
-    body.append(hint);
+  /* -------------------------------------------------------- Eintraege --- */
+  const tabItems = (panel) => {
+    panel.append(el('p', 'note', isKnobBank
+      ? 'Jeder Eintrag ist ein Poti. Mit eigener Adresse sendet es dorthin, ohne Adresse an die Adresse des Bauteils.'
+      : 'Mit eigener Adresse sendet der Eintrag „an"/„aus" dorthin. Ohne Adresse geht sein Wert an die Adresse des Bauteils.'));
     const list = el('div');
     w.items.forEach((item, i) => {
       const row = el('div', 'itemrow');
@@ -304,44 +355,95 @@ export function buildInspector(body, w, page, cbs) {
       );
       const del = el('button', 'iconbtn', '✕');
       del.type = 'button';
+      del.setAttribute('aria-label', 'Eintrag loeschen');
       del.addEventListener('click', () => { w.items.splice(i, 1); rebuild(); });
       row.append(del);
       list.append(row);
     });
-    body.append(list);
+    panel.append(list);
     const add = el('button', 'btn', 'Eintrag hinzufuegen');
     add.type = 'button';
     add.addEventListener('click', () => {
-      w.items.push({ label: `${w.items.length + 1}`, address: '', value: w.items.length + 1 });
+      // Der neue Eintrag zaehlt den vorigen hoch — Name, Adresse und Wert.
+      const prev = w.items[w.items.length - 1];
+      w.items.push(prev
+        ? {
+            label: bumpNumber(prev.label, ` ${w.items.length + 1}`),
+            address: prev.address ? bumpNumber(prev.address, '2') : '',
+            value: prev.value + 1,
+          }
+        : { label: '1', address: '', value: 1 });
       rebuild();
     });
-    body.append(add);
+    panel.append(add);
+  };
+
+  /* ----------------------------------------------------------- Layout --- */
+  const tabLayout = (panel) => {
+    const m = minSize(w.type);
+    const g = el('div', 'grid2');
+    g.append(
+      stepper('Breite (Spalten)', w.cw, m.cw, page.columns, (v) => { w.cw = v; change(); }),
+      stepper('Hoehe (Zeilen)', w.ch, m.ch, MAX_ROWS, (v) => { w.ch = v; change(); }),
+    );
+    panel.append(g);
+    if (w.type === 'fader' || w.type === 'color') {
+      panel.append(field('Ausrichtung', selectInput(w.orient, [['v', 'senkrecht'], ['h', 'waagerecht']],
+        (v) => { w.orient = v; rebuild(); })));
+    }
+    if (w.type === 'label') {
+      panel.append(field('Ausrichtung', selectInput(w.align, [['left', 'links'], ['center', 'mittig'], ['right', 'rechts']],
+        (v) => { w.align = v; change(); })));
+    }
+    if (hasItems) {
+      panel.append(field('Spalten im Feld (0 = automatisch)',
+        numInput(w.cols, (v) => { w.cols = clamp(Math.round(v), 0, 12); rebuild(); }, { min: 0, max: 12, step: 1 })));
+    }
+  };
+
+  const tabs = [
+    { id: 'allg', name: 'Allgemein', build: tabAllg },
+    { id: 'wert', name: 'Werte', build: tabWert },
+    ...(hasItems ? [{ id: 'items', name: 'Eintraege', build: tabItems }] : []),
+    { id: 'layout', name: 'Groesse', build: tabLayout },
+  ];
+
+  if (lastTab.id !== w.id || !tabs.some((t) => t.id === lastTab.tab)) lastTab = { id: w.id, tab: 'allg' };
+
+  const bar = el('div', 'tabs');
+  bar.setAttribute('role', 'tablist');
+  const panel = el('div', 'tabpanel');
+  for (const t of tabs) {
+    const b = el('button', 'tab' + (t.id === lastTab.tab ? ' on' : ''), t.name);
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(t.id === lastTab.tab));
+    b.addEventListener('click', () => {
+      lastTab = { id: w.id, tab: t.id };
+      buildInspector(body, w, page, cbs);
+    });
+    bar.append(b);
   }
+  body.append(bar, panel);
+  (tabs.find((t) => t.id === lastTab.tab) || tabs[0]).build(panel);
 
-  body.append(el('h3', null, 'Farbe'));
-  body.append(colorRow(w.color, (c) => { w.color = c; rebuild(); }));
-
-  body.append(el('h3', null, 'Groesse'));
-  const g2 = el('div', 'grid2');
-  const m = minSize(w.type);
-  g2.append(
-    field('Breite (Spalten)', numInput(w.cw, (v) => { w.cw = clamp(Math.round(v), m.cw, page.columns); change(); }, { min: m.cw, max: page.columns, step: 1 })),
-    field('Hoehe (Zeilen)', numInput(w.ch, (v) => { w.ch = clamp(Math.round(v), m.ch, MAX_ROWS); change(); }, { min: m.ch, max: MAX_ROWS, step: 1 })),
+  /* Duplizieren und Loeschen liegen immer griffbereit unter den Reitern. */
+  const actions = el('div', 'row inspactions');
+  const mk = (icon, label, cls, fn) => {
+    const b = el('button', `btn ${cls}`);
+    b.type = 'button';
+    b.append(uiIcon(icon), el('span', null, label));
+    b.addEventListener('click', fn);
+    return b;
+  };
+  actions.append(
+    mk('copy', 'Duplizieren', 'grow', () => cbs.onDuplicate()),
+    mk('trash', 'Loeschen', 'danger', () => cbs.onDelete()),
   );
-  body.append(g2);
-
-  const actions = el('div', 'row wrap');
-  const dup = el('button', 'btn', 'Duplizieren');
-  dup.type = 'button';
-  dup.addEventListener('click', () => cbs.onDuplicate());
-  const del = el('button', 'btn danger', 'Loeschen');
-  del.type = 'button';
-  del.addEventListener('click', () => cbs.onDelete());
-  actions.append(dup, del);
-  body.append(el('h3', null, 'Aktionen'), actions);
+  body.append(actions);
+  syncNote();
+  body.append(note);
 }
 
-/** Kopie eines Widgets mit neuer Kennung und ohne Position. */
-export function duplicateWidget(w) {
-  return { ...JSON.parse(JSON.stringify(w)), id: uid(), gx: -1, gy: -1 };
-}
+/** Kopie eines Widgets — Beschriftung und Adressen zaehlen hoch. */
+export const duplicateWidget = copyWidget;

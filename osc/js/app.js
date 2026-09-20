@@ -7,12 +7,13 @@
  */
 
 import {
-  makeWidget, makePage, normalizeProject, autoArrange, placeMissing, dropAt,
+  makeWidget, makePage, normalizeProject, autoArrange, dropAt, placeCopy,
   usedRows, rescale, findSlot, clamp, TYPES, TYPE_ORDER, MIN_COLS, MAX_COLS,
 } from './model.js';
 import { PRESETS, buildPreset, starterProject } from './presets.js';
 import { createWidget, setHaptics } from './widgets.js';
 import { attachEditing, buildInspector, duplicateWidget } from './editor.js';
+import { typeIcon, uiIcon } from './icons.js';
 import { createLink, defaultBridgeUrl } from './conn.js';
 import { formatMessage } from './osc.js';
 import {
@@ -20,7 +21,7 @@ import {
   loadLibrary, storeInLibrary, removeFromLibrary,
 } from './store.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -49,7 +50,7 @@ const link = createLink({
   onFeedback: (m) => {
     const list = byAddress.get(m.address);
     if (!list) return;
-    for (const inst of list) inst.feedback(m.args, m.types);
+    for (const inst of list) inst.feedback(m.args, m.types, m.address);
   },
   onLog: (entry) => {
     logBuf.push(entry);
@@ -111,10 +112,10 @@ function renderTabs() {
     b.type = 'button';
     b.addEventListener('click', () => {
       project.currentPageId = p.id;
-      selectedId = null;
       persist();
       renderTabs();
       renderSurface();
+      setSelection(null);
     });
     pageTabs.append(b);
   });
@@ -180,6 +181,47 @@ function renderSurface() {
   fitRows();
 }
 
+/* -------------------------------------------------------------- Auswahl --- */
+
+/** Das ausgewaehlte Bauteil der aktuellen Seite (oder null). */
+const selected = () => currentPage().widgets.find((x) => x.id === selectedId) || null;
+
+/**
+ * Auswahl setzen und die Leiste darunter auffrischen. Dort liegen
+ * Einstellungen, Duplizieren und Loeschen — ohne Umweg ueber ein Blatt.
+ */
+function setSelection(id) {
+  selectedId = id;
+  for (const t of $$('.tile', surface)) t.classList.toggle('sel', t.dataset.id === id);
+  const w = selected();
+  const row = $('#selRow');
+  if (!row) return;
+  row.hidden = !w || mode !== 'edit';
+  // Solange etwas gewaehlt ist, tritt der Merksatz zurueck — die Leiste
+  // erklaert sich selbst und die Bedienflaeche bleibt gross.
+  $('#editbar').classList.toggle('has-sel', !row.hidden);
+  if (w) $('#selName').textContent = `${w.label || TYPES[w.type].name} · ${TYPES[w.type].name}`;
+}
+
+function duplicateSelected(w) {
+  const page = currentPage();
+  const copy = duplicateWidget(w, page.widgets);
+  page.widgets.push(copy);
+  placeCopy(page.widgets, page.columns, copy, w);
+  persist();
+  renderSurface();
+  setSelection(copy.id);
+  return copy;
+}
+
+function deleteWidget(w) {
+  const page = currentPage();
+  page.widgets = page.widgets.filter((x) => x.id !== w.id);
+  persist();
+  renderSurface();
+  setSelection(null);
+}
+
 /* --------------------------------------------------------------- Modus --- */
 
 function setMode(next) {
@@ -189,10 +231,11 @@ function setMode(next) {
   $('#editbar').hidden = !on;
   $('#colOut').textContent = currentPage().columns;
   renderSurface();
+  setSelection(on ? selectedId : null);
   if (!on) closeSheet();
 }
 
-/** Bauteil anlegen — an der angetippten Stelle, sonst am ersten freien Platz. */
+/** Bauteil anlegen — an der gemerkten Stelle, sonst am ersten freien Platz. */
 function addWidget(type) {
   const page = currentPage();
   const w = makeWidget(type);
@@ -206,9 +249,9 @@ function addWidget(type) {
     w.gy = slot.gy;
   }
   pendingSlot = null;
-  selectedId = w.id;
   persist();
   renderSurface();
+  setSelection(w.id);
   openInspector(w);
 }
 
@@ -261,25 +304,12 @@ function prepareSheet(sel) {
 
 function openInspector(w) {
   const page = currentPage();
-  $('#inspTitle').textContent = w.label || TYPES[w.type].name;
+  const title = () => { $('#inspTitle').textContent = w.label || TYPES[w.type].name; };
+  title();
   buildInspector($('#inspBody'), w, page, {
-    onChange: () => { persist(); renderSurface(); $('#inspTitle').textContent = w.label || TYPES[w.type].name; },
-    onDelete: () => {
-      page.widgets = page.widgets.filter((x) => x.id !== w.id);
-      selectedId = null;
-      persist();
-      renderSurface();
-      closeSheet();
-    },
-    onDuplicate: () => {
-      const copy = duplicateWidget(w);
-      page.widgets.push(copy);
-      placeMissing(page.widgets, page.columns);
-      selectedId = copy.id;
-      persist();
-      renderSurface();
-      openInspector(copy);
-    },
+    onChange: () => { persist(); renderSurface(); setSelection(w.id); title(); },
+    onDelete: () => { deleteWidget(w); closeSheet(); },
+    onDuplicate: () => openInspector(duplicateSelected(w)),
   });
   openSheet('#sheetInsp');
 }
@@ -291,15 +321,13 @@ function renderPicker() {
   list.replaceChildren();
   for (const type of TYPE_ORDER) {
     const b = document.createElement('button');
-    b.className = 'menuitem';
+    b.className = 'pico';
     b.type = 'button';
+    b.title = TYPES[type].hint;
     const t = document.createElement('span');
-    t.className = 'mi-t';
+    t.className = 'pico-t';
     t.textContent = TYPES[type].name;
-    const s = document.createElement('span');
-    s.className = 'mi-s';
-    s.textContent = TYPES[type].hint;
-    b.append(t, s);
+    b.append(typeIcon(type), t);
     b.addEventListener('click', () => { closeSheet(); addWidget(type); });
     list.append(b);
   }
@@ -346,9 +374,9 @@ function widgetFromFeedback(entry) {
   w.gx = slot.gx;
   w.gy = slot.gy;
   page.widgets.push(w);
-  selectedId = w.id;
   persist();
   setMode('edit');
+  setSelection(w.id);
   openInspector(w);
 }
 
@@ -367,7 +395,7 @@ function renderPageList() {
     name.addEventListener('focus', () => {
       if (p.id === project.currentPageId) return;
       project.currentPageId = p.id;
-      persist(); renderTabs(); renderSurface(); renderPageList();
+      persist(); renderTabs(); renderSurface(); renderPageList(); setSelection(null);
     });
     row.append(name);
 
@@ -395,7 +423,7 @@ function renderPageList() {
       if (!confirm(`Seite „${p.name}" loeschen?`)) return;
       project.pages = project.pages.filter((x) => x.id !== p.id);
       if (project.currentPageId === p.id) project.currentPageId = project.pages[0].id;
-      persist(); renderPageList(); renderTabs(); renderSurface();
+      persist(); renderPageList(); renderTabs(); renderSurface(); setSelection(null);
     }));
     list.append(row);
   });
@@ -425,7 +453,7 @@ function renderLibrary() {
     open.textContent = 'Laden';
     open.addEventListener('click', () => {
       project = normalizeProject(p);
-      persist(); renderTabs(); renderSurface(); renderLibrary();
+      persist(); renderTabs(); renderSurface(); setSelection(null); renderLibrary();
       $('#inProject').value = project.name;
     });
     const del = document.createElement('button');
@@ -458,6 +486,7 @@ function setColumns(cols) {
   $('#colOut').textContent = next;
   persist();
   renderSurface();
+  setSelection(selectedId);
 }
 
 function bind() {
@@ -478,15 +507,29 @@ function bind() {
     autoArrange(page.widgets, page.columns);
     persist();
     renderSurface();
+    setSelection(selectedId);
   });
+
+  /* Auswahl-Leiste: gilt fuer das gerade gewaehlte Bauteil */
+  $('#btnSelDup').append(uiIcon('copy'));
+  $('#btnSelDel').append(uiIcon('trash'));
+  $('#btnSelEdit').addEventListener('click', () => { const w = selected(); if (w) openInspector(w); });
+  $('#btnSelDup').addEventListener('click', () => { const w = selected(); if (w) duplicateSelected(w); });
+  $('#btnSelDel').addEventListener('click', () => { const w = selected(); if (w) deleteWidget(w); });
 
   attachEditing(surface, {
     getPage: currentPage,
     isEditing: () => mode === 'edit',
-    onChange: () => { persist(); renderSurface(); },
-    onSelect: (id) => { selectedId = id; for (const t of $$('.tile', surface)) t.classList.toggle('sel', t.dataset.id === id); },
-    onTap: (w) => openInspector(w),
-    onEmptyTap: (cell) => { pendingSlot = cell; openSheet('#sheetPick'); },
+    selectedId: () => selectedId,
+    onChange: () => { persist(); renderSurface(); setSelection(selectedId); },
+    onSelect: (id) => setSelection(id),
+    onOpen: (w) => openInspector(w),
+    onEmptyHold: (cell) => {
+      // Langer Druck auf freie Flaeche: hier soll das naechste Bauteil hin.
+      pendingSlot = cell;
+      try { navigator.vibrate?.(12); } catch { /* egal */ }
+      openSheet('#sheetPick');
+    },
   });
 
   /* Verbindung */
@@ -520,13 +563,14 @@ function bind() {
     const page = makePage(`Seite ${project.pages.length + 1}`, { fit: false });
     project.pages.push(page);
     project.currentPageId = page.id;
+    selectedId = null;
     persist(); renderPageList(); renderTabs(); closeSheet(); setMode('edit');
   });
   $('#btnAddPreset').addEventListener('click', () => {
     const page = buildPreset($('#selPreset').value);
     project.pages.push(page);
     project.currentPageId = page.id;
-    persist(); renderPageList(); renderTabs(); renderSurface();
+    persist(); renderPageList(); renderTabs(); renderSurface(); setSelection(null);
   });
   $('#fitChk').addEventListener('change', (ev) => {
     currentPage().fit = ev.target.checked;
@@ -549,15 +593,13 @@ function bind() {
     const i = project.pages.indexOf(page);
     fresh.id = page.id;
     project.pages[i] = fresh;
-    selectedId = null;
-    persist(); renderTabs(); renderSurface();
+    persist(); renderTabs(); renderSurface(); setSelection(null);
     closeSheet();
   });
   $('#btnResetAll').addEventListener('click', () => {
     if (!confirm('Alle Seiten auf die Werkseinstellung zuruecksetzen? Der aktuelle Aufbau geht verloren.')) return;
     project = starterProject();
-    selectedId = null;
-    persist(); renderTabs(); renderSurface();
+    persist(); renderTabs(); renderSurface(); setSelection(null);
     closeSheet();
   });
 
@@ -616,7 +658,7 @@ function importProject(ev) {
     try {
       project = normalizeProject(JSON.parse(String(reader.result)));
       persist();
-      renderTabs(); renderSurface(); renderLibrary();
+      renderTabs(); renderSurface(); setSelection(null); renderLibrary();
       $('#inProject').value = project.name;
     } catch {
       alert('Datei konnte nicht gelesen werden.');

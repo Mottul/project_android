@@ -22,19 +22,26 @@ export const COLORS = [
   '#94a3b8', '#f5f5f5',
 ];
 
-/** Alle Bauteile mit Anzeigename, Kurzbeschreibung und Standardgroesse. */
+/**
+ * Alle Bauteile mit Anzeigename, Kurzbeschreibung und Standardgroesse.
+ * `min` ist bewusst klein gehalten — wer eine Reihe winziger Taster bauen will,
+ * soll das duerfen; die Bauteile passen sich der Kachel an.
+ */
 export const TYPES = {
-  fader:  { name: 'Fader',    hint: 'Regler, zieht relativ',            cw: 3, ch: 6, min: { cw: 2, ch: 3 } },
-  knob:   { name: 'Poti',     hint: 'Drehregler, auch endlos',          cw: 3, ch: 4, min: { cw: 2, ch: 3 } },
-  toggle: { name: 'Schalter', hint: 'rastet ein und aus',               cw: 4, ch: 2, min: { cw: 2, ch: 1 } },
-  button: { name: 'Taster',   hint: 'sendet beim Druecken und Loslassen', cw: 4, ch: 2, min: { cw: 2, ch: 1 } },
-  bank:   { name: 'Bank',     hint: 'Feld aus mehreren Tastern',        cw: 12, ch: 4, min: { cw: 3, ch: 2 } },
-  select: { name: 'Auswahl',  hint: 'eine Option aus mehreren',         cw: 6, ch: 4, min: { cw: 3, ch: 2 } },
-  xy:     { name: 'XY-Pad',   hint: 'zwei Werte auf einer Flaeche',     cw: 6, ch: 5, min: { cw: 3, ch: 3 } },
-  color:  { name: 'Farbe',    hint: 'RGB (+ Deckkraft)',                cw: 6, ch: 6, min: { cw: 4, ch: 4 } },
-  label:  { name: 'Text',     hint: 'Beschriftung ohne Funktion',       cw: 12, ch: 1, min: { cw: 2, ch: 1 } },
-  meter:  { name: 'Anzeige',  hint: 'zeigt eingehendes Feedback',       cw: 6, ch: 3, min: { cw: 3, ch: 2 } },
+  fader:  { name: 'Fader',    hint: 'Regler, zieht relativ',            cw: 3, ch: 6, min: { cw: 1, ch: 2 } },
+  knob:   { name: 'Poti',     hint: 'Drehregler, auch endlos',          cw: 3, ch: 4, min: { cw: 1, ch: 2 } },
+  toggle: { name: 'Schalter', hint: 'rastet ein und aus',               cw: 4, ch: 2, min: { cw: 1, ch: 1 } },
+  button: { name: 'Taster',   hint: 'sendet beim Druecken und Loslassen', cw: 4, ch: 2, min: { cw: 1, ch: 1 } },
+  bank:   { name: 'Bank',     hint: 'Feld aus Tastern oder Potis',      cw: 12, ch: 4, min: { cw: 2, ch: 1 } },
+  select: { name: 'Auswahl',  hint: 'eine Option aus mehreren',         cw: 6, ch: 4, min: { cw: 2, ch: 1 } },
+  xy:     { name: 'XY-Pad',   hint: 'zwei Werte auf einer Flaeche',     cw: 6, ch: 5, min: { cw: 2, ch: 2 } },
+  color:  { name: 'Farbe',    hint: 'RGB (+ Deckkraft)',                cw: 6, ch: 6, min: { cw: 2, ch: 2 } },
+  label:  { name: 'Text',     hint: 'Beschriftung ohne Funktion',       cw: 12, ch: 1, min: { cw: 1, ch: 1 } },
+  meter:  { name: 'Anzeige',  hint: 'zeigt eingehendes Feedback',       cw: 6, ch: 3, min: { cw: 2, ch: 1 } },
 };
+
+/** Verhalten einer Bank: Taster, Schalter oder Feld aus Potis. */
+export const BANK_MODES = ['momentary', 'toggle', 'knob'];
 
 /** Reihenfolge in der Bauteil-Palette. */
 export const TYPE_ORDER = ['fader', 'knob', 'toggle', 'button', 'bank', 'select', 'xy', 'color', 'meter', 'label'];
@@ -92,7 +99,7 @@ export function makeWidget(type = 'fader', over = {}) {
     items: [],
     orient: 'v',           // Fader/Farbe: Ausrichtung
     cols: 0,               // Bank/Auswahl: Spalten (0 = automatisch)
-    bankMode: 'momentary', // Bank: 'momentary' | 'toggle'
+    bankMode: 'momentary', // Bank: 'momentary' | 'toggle' | 'knob'
     endless: false,        // Poti: Endlos-Encoder
     align: 'left',         // Text: Ausrichtung
     source: 'number',      // Anzeige: 'number' | 'text'
@@ -131,7 +138,7 @@ export function normalizeWidget(raw) {
   w.text = String(w.text ?? '');
   w.orient = w.orient === 'h' ? 'h' : 'v';
   w.cols = clampInt(w.cols, 0, 12, 0);
-  w.bankMode = w.bankMode === 'toggle' ? 'toggle' : 'momentary';
+  w.bankMode = BANK_MODES.includes(w.bankMode) ? w.bankMode : 'momentary';
   w.endless = !!w.endless;
   w.align = ['left', 'center', 'right'].includes(w.align) ? w.align : 'left';
   w.source = w.source === 'text' ? 'text' : 'number';
@@ -300,4 +307,79 @@ export function rescale(page, columns) {
   }
   compact(page.widgets, columns);
   return page;
+}
+
+/* -------------------------------------------------------------- Kopien --- */
+
+/**
+ * Letzte Zahl in einem Text um eins hochzaehlen.
+ * „Surface 1" -> „Surface 2", „/cues/3/recall" -> „/cues/4/recall".
+ * Steht keine Zahl drin, haengt `suffix` an ("Master" -> "Master 2").
+ */
+export function bumpNumber(text, suffix = ' 2') {
+  const s = String(text ?? '');
+  if (!s) return s;
+  const m = s.match(/(\d+)(\D*)$/);
+  if (!m) return s + suffix;
+  const next = String(Number(m[1]) + 1).padStart(m[1].length, '0');
+  return s.slice(0, m.index) + next + m[2];
+}
+
+/** Alle Adressen einer Widget-Liste (inkl. Y-Adresse und Eintraegen). */
+export function addressesOf(widgets) {
+  const out = new Set();
+  for (const w of widgets || []) {
+    if (w.address) out.add(w.address);
+    if (w.addressY) out.add(w.addressY);
+    for (const it of w.items || []) if (it.address) out.add(it.address);
+  }
+  return out;
+}
+
+/** Naechste noch freie Adresse — zaehlt so lange hoch, bis keine doppelt ist. */
+export function nextFreeAddress(address, taken) {
+  if (!address) return address;
+  const used = taken instanceof Set ? taken : new Set(taken || []);
+  let next = bumpNumber(address, '2');
+  for (let i = 0; i < 200 && used.has(next); i += 1) next = bumpNumber(next, '2');
+  return next;
+}
+
+/**
+ * Kopie eines Widgets: neue Kennung, hochgezaehlte Beschriftung und Adressen.
+ * @param {object} w        Vorlage
+ * @param {Array}  widgets  Seiteninhalt, damit keine Adresse doppelt entsteht
+ */
+export function copyWidget(w, widgets = []) {
+  const copy = { ...JSON.parse(JSON.stringify(w)), id: uid(), gx: -1, gy: -1 };
+  const used = addressesOf(widgets);
+  copy.label = bumpNumber(copy.label, ' 2');
+  if (copy.address) { copy.address = nextFreeAddress(copy.address, used); used.add(copy.address); }
+  if (copy.addressY) { copy.addressY = nextFreeAddress(copy.addressY, used); used.add(copy.addressY); }
+  for (const it of copy.items) {
+    if (!it.address) continue;
+    it.address = nextFreeAddress(it.address, used);
+    used.add(it.address);
+  }
+  return copy;
+}
+
+/**
+ * Platz fuer eine Kopie: am liebsten direkt rechts neben dem Original, sonst
+ * darunter, sonst der erste freie Platz. So bleibt Zusammengehoeriges beisammen.
+ */
+export function placeCopy(widgets, columns, copy, orig) {
+  const others = widgets.filter((x) => x.id !== copy.id);
+  const tries = [
+    { gx: orig.gx + orig.cw, gy: orig.gy },
+    { gx: orig.gx, gy: orig.gy + orig.ch },
+  ];
+  for (const t of tries) {
+    const rect = { id: copy.id, gx: t.gx, gy: t.gy, cw: copy.cw, ch: copy.ch };
+    if (fits(rect, others, columns, copy.id)) { copy.gx = rect.gx; copy.gy = rect.gy; return copy; }
+  }
+  const slot = findSlot(others, columns, copy.cw, copy.ch);
+  copy.gx = slot.gx;
+  copy.gy = slot.gy;
+  return copy;
 }
