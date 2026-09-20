@@ -339,6 +339,13 @@ export function buildInspector(body, w, page, cbs) {
       panel.append(field('Anzeigen als', selectInput(w.source, [['number', 'Zahl mit Balken'], ['text', 'Text']],
         (v) => { w.source = v; rebuild(); })));
     }
+    if (w.type === 'color') {
+      panel.append(field('Bedienung', selectInput(w.colorMode, [
+        ['rgb', 'Regler R/G/B + Deckkraft'],
+        ['basic', 'Grundfarben + Deckkraft'],
+        ['picker', 'Farbwaehler + Deckkraft'],
+      ], (v) => { w.colorMode = v; rebuild(); })));
+    }
     if (!panel.childElementCount) panel.append(el('p', 'note', 'Dieses Bauteil hat keine Werte.'));
   };
 

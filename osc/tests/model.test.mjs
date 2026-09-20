@@ -5,6 +5,7 @@ import {
   makeWidget, makePage, normalizeProject, normalizeWidget, overlaps, fits, findSlot,
   placeMissing, autoArrange, compact, usedRows, rescale, minSize, dropAt, DEFAULT_COLS,
   bumpNumber, nextFreeAddress, copyWidget, placeCopy, addressesOf,
+  BASE_COLORS, COLOR_MODES,
 } from '../js/model.js';
 import { buildPreset, starterProject, PRESETS } from '../js/presets.js';
 
@@ -219,4 +220,26 @@ test('Mindestgroessen erlauben kleine Kacheln', () => {
 test('die Bank kennt den Poti-Modus', () => {
   assert.equal(normalizeWidget({ type: 'bank', bankMode: 'knob' }).bankMode, 'knob');
   assert.equal(normalizeWidget({ type: 'bank', bankMode: 'quatsch' }).bankMode, 'momentary');
+});
+
+/* ----------------------------------------------------------------- Farbe --- */
+
+test('das Farb-Bauteil kennt drei Bedienarten', () => {
+  assert.deepEqual(COLOR_MODES, ['rgb', 'basic', 'picker']);
+  assert.equal(makeWidget('color').colorMode, 'rgb', 'alte Seiten bleiben, wie sie waren');
+  for (const mode of COLOR_MODES) {
+    assert.equal(normalizeWidget({ type: 'color', colorMode: mode }).colorMode, mode);
+  }
+  assert.equal(normalizeWidget({ type: 'color', colorMode: 'quatsch' }).colorMode, 'rgb');
+});
+
+test('die Grundfarben sind saubere Hex-Werte und eindeutig', () => {
+  assert.ok(BASE_COLORS.length >= 12);
+  const seen = new Set();
+  for (const [name, hex] of BASE_COLORS) {
+    assert.ok(name && typeof name === 'string', 'jede Farbe hat einen Namen');
+    assert.match(hex, /^#[0-9a-f]{6}$/, `${name}: ${hex}`);
+    assert.ok(!seen.has(hex), `${hex} kommt doppelt vor`);
+    seen.add(hex);
+  }
 });

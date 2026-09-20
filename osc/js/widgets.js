@@ -11,7 +11,7 @@
  *    kein Doppeltipp-Zoom, kein verlorener Finger.
  */
 
-import { clamp, clamp01 } from './model.js';
+import { clamp, clamp01, BASE_COLORS } from './model.js';
 
 const HOLD = 40;    // px seitlich -> feiner Griff
 const HOLD2 = 120;  // px seitlich -> sehr feiner Griff
@@ -137,25 +137,37 @@ export function knobArcPath(n, r = 38) {
  * Das SVG skaliert ueber `preserveAspectRatio` mit und bleibt dabei mittig,
  * egal wie hoch oder schmal die Kachel ist.
  */
-function makeKnob(cls = 'knob') {
+function makeKnob(cls = 'knob', showValue = false) {
   const wrap = el('div', cls);
+  // Mit Wert in der Mitte wird der Zeiger zur Marke am Rand — sonst liefe er
+  // durch die Zahl. Die Schrift sitzt im SVG und skaliert dadurch von selbst
+  // mit dem Poti mit, ob es nun fingerbreit ist oder handtellergross.
   wrap.innerHTML =
     '<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true">' +
     '<circle class="k-bg" cx="50" cy="50" r="38"/>' +
     '<path class="k-track" d=""/>' +
     '<path class="k-arc" d=""/>' +
-    '<line class="k-ptr" x1="50" y1="50" x2="50" y2="18"/>' +
+    `<line class="k-ptr" x1="50" y1="${showValue ? 32 : 50}" x2="50" y2="18"/>` +
+    (showValue ? '<text class="k-val" x="50" y="50" text-anchor="middle" dominant-baseline="central">–</text>' : '') +
     '</svg>';
   const track = wrap.querySelector('.k-track');
   const arc = wrap.querySelector('.k-arc');
   const ptr = wrap.querySelector('.k-ptr');
+  const text = wrap.querySelector('.k-val');
   const aim = (deg) => {
     const [px, py] = knobPoint(deg, 34);
     ptr.setAttribute('x2', f1(px));
     ptr.setAttribute('y2', f1(py));
+    if (!showValue) return;
+    // Innenende der Marke mitfuehren, damit sie radial steht.
+    const [ix, iy] = knobPoint(deg, 20);
+    ptr.setAttribute('x1', f1(ix));
+    ptr.setAttribute('y1', f1(iy));
   };
   return {
     el: wrap,
+    /** Zahl in der Mitte des Zifferblatts. */
+    text(s) { if (text) text.textContent = s; },
     /** Stellung 0..1 auf dem 270-Grad-Bogen. */
     value(n) {
       const v = clamp01(n);
@@ -220,7 +232,13 @@ export function createWidget(w, ctx) {
   if (w.type === 'fader') {
     const track = el('div', 'track');
     const fill = el('div', 'fill');
-    track.append(fill);
+    // Der Wert steht IN der Bahn — oben bleibt dadurch die ganze Zeile fuer
+    // den Namen. Er steht zweimal da: einmal hell, einmal dunkel; die dunkle
+    // Fassung ist genau auf den gefuellten Teil beschnitten. Dadurch bleibt
+    // die Zahl lesbar, egal wo der Balken gerade steht — auch mittendrin.
+    const valLow = el('span', 'trackval');
+    const valHigh = el('span', 'trackval on');
+    track.append(fill, valLow, valHigh);
     body.append(track);
     tile.classList.toggle('horizontal', w.orient === 'h');
 
@@ -228,7 +246,11 @@ export function createWidget(w, ctx) {
       const n = norm(w, w.value);
       if (w.orient === 'h') { fill.style.width = `${n * 100}%`; fill.style.height = '100%'; }
       else { fill.style.height = `${n * 100}%`; fill.style.width = '100%'; }
-      val.textContent = fmt(w.value);
+      track.style.setProperty('--n', String(n));
+      const text = fmt(w.value);
+      valLow.textContent = text;
+      valHigh.textContent = text;
+      val.textContent = text;   // Rueckfall fuer sehr schmale Kacheln
     };
     drag(track, {
       axis: w.orient === 'h' ? 'x' : 'y',
@@ -359,12 +381,13 @@ export function createWidget(w, ctx) {
       const c = cells[i];
       if (!c) return;
       c.knob.value(norm(w, c.item.value));
+      c.knob.text(fmt(c.item.value));
       c.cap.textContent = c.item.label || String(i + 1);
     };
 
     w.items.forEach((item, i) => {
       const cell = el('div', 'kcell');
-      const knob = makeKnob('knob mini');
+      const knob = makeKnob('knob mini', true);
       const cap = el('span', 'kcap');
       cell.append(knob.el, cap);
       grid.append(cell);
@@ -377,7 +400,6 @@ export function createWidget(w, ctx) {
         onMove: (dx, dy, fine) => {
           item.value = clamp(item.value + (-dy / 160) * fine * span(w), lo(w), hi(w));
           paintCell(i);
-          val.textContent = `${item.label || i + 1} · ${fmt(item.value)}`;
           send(addr(), [arg(w, item.value)]);
         },
         onEnd: (moved) => {
@@ -520,9 +542,15 @@ export function createWidget(w, ctx) {
     const swatch = el('div', 'swatch');
     const rows = el('div', 'crows');
     body.append(swatch, rows);
-    const chans = ['r', 'g', 'b', 'a'];
     const bars = {};
-    for (const ch of chans) {
+    const hex2 = (v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, '0');
+    const rgbHex = () => `#${hex2(w.r)}${hex2(w.g)}${hex2(w.b)}`;
+    const rgba = () => [{ type: 'f', value: w.r }, { type: 'f', value: w.g },
+                        { type: 'f', value: w.b }, { type: 'f', value: w.a }];
+    const emit = (now) => send(w.address, rgba(), now);
+
+    /** Ein Kanalregler (waagerecht, relativ wie alles andere). */
+    const addChannel = (ch) => {
       const row = el('div', 'crow');
       const tag = el('span', 'ctag', ch.toUpperCase());
       const track = el('div', `ctrack c-${ch}`);
@@ -538,21 +566,76 @@ export function createWidget(w, ctx) {
           const r = track.getBoundingClientRect();
           w[ch] = clamp01(w[ch] + (dx / Math.max(1, r.width)) * fine);
           api.paint();
-          send(w.address, [{ type: 'f', value: w.r }, { type: 'f', value: w.g }, { type: 'f', value: w.b }, { type: 'f', value: w.a }]);
+          emit(false);
         },
         onEnd: (moved) => {
           touching = false;
           if (!moved) return;
-          send(w.address, [{ type: 'f', value: w.r }, { type: 'f', value: w.g }, { type: 'f', value: w.b }, { type: 'f', value: w.a }], true);
+          emit(true);
           ctx.commit();
         },
       });
+    };
+
+    let picker = null;
+    let chips = [];
+
+    if (w.colorMode === 'basic') {
+      // Grundfarben zum Antippen — am Pult schneller als drei Regler.
+      rows.classList.add('compact');
+      const grid = el('div', 'cgrid');
+      rows.append(grid);
+      for (const [name, hex] of BASE_COLORS) {
+        const b = el('button', 'chip');
+        b.type = 'button';
+        b.style.background = hex;
+        b.title = name;
+        b.setAttribute('aria-label', name);
+        b.dataset.hex = hex.toLowerCase();
+        b.addEventListener('click', () => {
+          w.r = parseInt(hex.slice(1, 3), 16) / 255;
+          w.g = parseInt(hex.slice(3, 5), 16) / 255;
+          w.b = parseInt(hex.slice(5, 7), 16) / 255;
+          api.paint();
+          tick();
+          emit(true);
+          ctx.commit();
+        });
+        grid.append(b);
+        chips.push(b);
+      }
+      addChannel('a');
+    } else if (w.colorMode === 'picker') {
+      // Farbwaehler des Geraets: eine Flaeche, ein Griff, jeder Ton erreichbar.
+      rows.classList.add('compact');
+      picker = el('input');
+      picker.type = 'color';
+      picker.className = 'cpick';
+      picker.setAttribute('aria-label', 'Farbe waehlen');
+      const fromPicker = (now) => {
+        const v = picker.value;
+        w.r = parseInt(v.slice(1, 3), 16) / 255;
+        w.g = parseInt(v.slice(3, 5), 16) / 255;
+        w.b = parseInt(v.slice(5, 7), 16) / 255;
+        api.paint();
+        emit(now);
+      };
+      picker.addEventListener('input', () => fromPicker(false));
+      picker.addEventListener('change', () => { fromPicker(true); ctx.commit(); });
+      rows.append(picker);
+      addChannel('a');
+    } else {
+      for (const ch of ['r', 'g', 'b', 'a']) addChannel(ch);
     }
+
     api.paint = () => {
       const c = (v) => Math.round(clamp01(v) * 255);
       swatch.style.background = `rgb(${c(w.r)} ${c(w.g)} ${c(w.b)} / ${w.a})`;
-      for (const ch of chans) bars[ch].style.width = `${w[ch] * 100}%`;
-      val.textContent = `#${[w.r, w.g, w.b].map((v) => c(v).toString(16).padStart(2, '0')).join('')}`;
+      for (const ch of Object.keys(bars)) bars[ch].style.width = `${w[ch] * 100}%`;
+      const hex = rgbHex();
+      if (picker && picker.value !== hex) picker.value = hex;
+      for (const b of chips) b.classList.toggle('on', b.dataset.hex === hex);
+      val.textContent = hex;
     };
     api.feedback = (args) => {
       if (touching) return;
