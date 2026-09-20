@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   makeWidget, makePage, normalizeProject, normalizeWidget, overlaps, fits, findSlot,
-  placeMissing, autoArrange, compact, usedRows, rescale, minSize, dropAt, DEFAULT_COLS,
+  placeMissing, autoArrange, compact, usedRows, recolumn, minSize, dropAt, DEFAULT_COLS,
   bumpNumber, nextFreeAddress, copyWidget, placeCopy, addressesOf,
-  BASE_COLORS, COLOR_MODES,
+  BASE_COLORS, COLOR_MODES, defaultPalette, hsv2rgb, rgb2hsv,
 } from '../js/model.js';
 import { buildPreset, starterProject, PRESETS } from '../js/presets.js';
 
@@ -59,12 +59,12 @@ test('compact zieht alles nach oben, ohne zu ueberlappen', () => {
   assert.equal(list[1].gy, 2);
 });
 
-test('rescale haelt alles im neuen Raster', () => {
+test('recolumn haelt alles im neuen Raster', () => {
   const page = makePage('t', { columns: 12, widgets: [
     makeWidget('fader', { gx: 0, gy: 0, cw: 3, ch: 6 }),
     makeWidget('fader', { gx: 9, gy: 0, cw: 3, ch: 6 }),
   ] });
-  rescale(page, 6);
+  recolumn(page, 6);
   assert.equal(page.columns, 6);
   for (const w of page.widgets) {
     assert.ok(w.gx >= 0 && w.gx + w.cw <= 6, `${w.gx}+${w.cw}`);
@@ -225,12 +225,34 @@ test('die Bank kennt den Poti-Modus', () => {
 /* ----------------------------------------------------------------- Farbe --- */
 
 test('das Farb-Bauteil kennt drei Bedienarten', () => {
-  assert.deepEqual(COLOR_MODES, ['rgb', 'basic', 'picker']);
+  assert.deepEqual(COLOR_MODES, ['rgb', 'hsv', 'palette']);
   assert.equal(makeWidget('color').colorMode, 'rgb', 'alte Seiten bleiben, wie sie waren');
   for (const mode of COLOR_MODES) {
     assert.equal(normalizeWidget({ type: 'color', colorMode: mode }).colorMode, mode);
   }
   assert.equal(normalizeWidget({ type: 'color', colorMode: 'quatsch' }).colorMode, 'rgb');
+  // Die Namen der ersten Fassung zeigen auf dasselbe.
+  assert.equal(normalizeWidget({ type: 'color', colorMode: 'basic' }).colorMode, 'palette');
+  assert.equal(normalizeWidget({ type: 'color', colorMode: 'picker' }).colorMode, 'hsv');
+});
+
+test('HSV und RGB rechnen sauber hin und her', () => {
+  const proben = [[0, 1, 1], [120, 1, 1], [210, 0.8, 0.9], [45, 0.5, 0.25], [0, 0, 1], [0, 0, 0]];
+  for (const [h, s2, v] of proben) {
+    const { r, g, b } = hsv2rgb(h, s2, v);
+    for (const c of [r, g, b]) assert.ok(c >= 0 && c <= 1, `Kanal ausserhalb 0..1 bei ${h}/${s2}/${v}`);
+    const back = rgb2hsv(r, g, b);
+    assert.ok(Math.abs(back.v - v) < 1e-9, `v bei ${h}/${s2}/${v}`);
+    assert.ok(Math.abs(back.s - s2) < 1e-9, `s bei ${h}/${s2}/${v}`);
+    if (s2 > 0 && v > 0) assert.ok(Math.abs(back.h - h) < 1e-6, `h bei ${h}/${s2}/${v}`);
+  }
+});
+
+test('die eigene Palette wird geprueft und begrenzt', () => {
+  const w = normalizeWidget({ type: 'color', palette: ['#ff0000', 'blau', '#00FF00'] });
+  assert.deepEqual(w.palette, ['#ff0000', '#ffffff', '#00ff00'], 'Unsinn wird zu Weiss');
+  assert.deepEqual(normalizeWidget({ type: 'color' }).palette, [], 'leer = Grundfarben');
+  assert.ok(defaultPalette().length >= 12);
 });
 
 test('die Grundfarben sind saubere Hex-Werte und eindeutig', () => {
@@ -242,4 +264,64 @@ test('die Grundfarben sind saubere Hex-Werte und eindeutig', () => {
     assert.ok(!seen.has(hex), `${hex} kommt doppelt vor`);
     seen.add(hex);
   }
+});
+
+/* ------------------------------------------------------------- Spalten --- */
+
+test('recolumn laesst die Groessen stehen', () => {
+  const page = makePage('t', { columns: 12, widgets: [
+    makeWidget('fader', { label: 'A', gx: 0, gy: 0, cw: 3, ch: 6 }),
+    makeWidget('toggle', { label: 'B', gx: 3, gy: 0, cw: 6, ch: 2 }),
+  ] });
+  recolumn(page, 11);
+  assert.deepEqual(page.widgets.map((w) => w.cw), [3, 6], 'nichts wird hochgerechnet');
+  recolumn(page, 12);
+  assert.deepEqual(page.widgets.map((w) => w.cw), [3, 6]);
+  assert.deepEqual(page.widgets.map((w) => w.gx), [0, 3], 'und nichts wandert');
+});
+
+test('Spalten hin und zurueck laesst den Aufbau heil', () => {
+  const page = buildPreset('madmapper');
+  const vorher = page.widgets.map((w) => `${w.label}:${w.gx},${w.gy} ${w.cw}x${w.ch}`).join('|');
+  for (const c of [11, 10, 9, 8, 7, 6, 7, 8, 9, 10, 11, 12]) recolumn(page, c);
+  const breiten = page.widgets.map((w) => w.cw);
+  assert.ok(breiten.every((cw) => cw <= 12), 'keine Kachel waechst ueber das Raster');
+  const master = page.widgets.find((w) => w.label === 'Master');
+  assert.equal(master.cw, 3, 'ein drei Spalten breiter Fader bleibt drei Spalten breit');
+  for (let i = 0; i < page.widgets.length; i += 1) {
+    for (let j = i + 1; j < page.widgets.length; j += 1) {
+      assert.ok(!overlaps(page.widgets[i], page.widgets[j]), 'nichts ueberlappt');
+    }
+    assert.ok(page.widgets[i].gx + page.widgets[i].cw <= 12, 'nichts ragt heraus');
+  }
+  assert.ok(vorher.length > 0);
+});
+
+test('beim Spaltenwechsel waechst nie eine Kachel von selbst', () => {
+  const page = buildPreset('madmapper');
+  const vorher = new Map(page.widgets.map((w) => [w.label, w.cw]));
+  for (const c of [11, 12, 11, 12, 4, 12]) {
+    recolumn(page, c);
+    for (const w of page.widgets) {
+      assert.ok(w.cw <= vorher.get(w.label), `${w.label} ist bei ${c} Spalten breiter geworden`);
+    }
+  }
+});
+
+test('was in beide Raster passt, bleibt beim Wechsel unberuehrt', () => {
+  const page = makePage('t', { columns: 12, widgets: [
+    makeWidget('fader', { label: 'A', gx: 0, gy: 0, cw: 3, ch: 6 }),
+    makeWidget('fader', { label: 'B', gx: 3, gy: 0, cw: 3, ch: 6 }),
+  ] });
+  recolumn(page, 11);
+  recolumn(page, 12);
+  assert.deepEqual(page.widgets.map((w) => `${w.gx},${w.gy} ${w.cw}x${w.ch}`), ['0,0 3x6', '3,0 3x6']);
+});
+
+test('beim Verkleinern behaelt die volle Breite die volle Breite', () => {
+  const page = makePage('t', { columns: 12, widgets: [makeWidget('label', { gx: 0, gy: 0, cw: 12, ch: 1 })] });
+  recolumn(page, 8);
+  assert.equal(page.widgets[0].cw, 8, 'die Ueberschrift laesst keinen Rest stehen');
+  recolumn(page, 4);
+  assert.equal(page.widgets[0].cw, 4);
 });

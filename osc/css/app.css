@@ -262,6 +262,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .c-g { background: linear-gradient(90deg, #000, #0f0); }
 .c-b { background: linear-gradient(90deg, #000, #00f); }
 .c-a { background: linear-gradient(90deg, #000, #fff); }
+.c-h { background: linear-gradient(90deg, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00); }
+.c-s, .c-v { background: var(--g, linear-gradient(90deg, #000, #fff)); }
 .cfill { position: absolute; top: 0; bottom: 0; left: 0; border-right: 2px solid #fff; }
 /* Grundfarben und Farbwaehler: oben die Flaeche, unten die Deckkraft */
 .crows.compact .crow { flex: 0 0 26px; }
@@ -273,12 +275,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 }
 .chip { border: 1px solid #0006; border-radius: 7px; padding: 0; min-width: 0; min-height: 0; }
 .chip.on { box-shadow: 0 0 0 2px var(--text); border-color: transparent; }
-.cpick {
-  flex: 1 1 auto; width: 100%; min-height: 0; height: auto;
-  padding: 3px; border-radius: 9px; border: 1px solid var(--line); background: #0a0e14;
-}
-.cpick::-webkit-color-swatch-wrapper { padding: 0; }
-.cpick::-webkit-color-swatch { border: 0; border-radius: 6px; }
+/* Palette im Inspektor: je Zeile eine Farbe */
+.palrows { display: grid; gap: 6px; margin: 10px 0; }
+.palrow { display: flex; gap: 8px; align-items: center; }
+.palrow input[type=color] { flex: 1 1 auto; height: 38px; }
 
 /* Text / Anzeige */
 .label-text { flex: 1 1 auto; display: flex; align-items: center; font-weight: 650; font-size: .95rem; line-height: 1.15; word-break: break-word; }
@@ -297,13 +297,15 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 @container tile (max-height: 58px) {
   .tile > .tile-head { display: none; }
 }
-@container tile (max-width: 78px) {
+/* Drei Spalten von zwoelf sind auf dem Handy rund 76px Inhalt — der Name
+   muss dort noch stehen. Erst darunter weicht er dem Wert. */
+@container tile (max-width: 56px) {
   .tile > .tile-head > .tile-name { display: none; }
   .tile > .tile-head > .tile-val { flex: 1 1 auto; text-align: center; }
 }
 /* Zu schmal fuer eine Zahl in der Bahn: dann steht sie wieder oben, sonst
    schnitte die Kachel sie ab und „0.50" saehe aus wie „0". */
-@container tile (max-width: 58px) {
+@container tile (max-width: 56px) {
   .t-fader .trackval { display: none; }
   .tile > .tile-head > .tile-val { display: block; font-size: .68rem; }
 }
@@ -386,6 +388,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 
 /* --------------------------------------------------------------- Sheets -- */
 .scrim { position: fixed; inset: 0; background: #000a; z-index: 40; backdrop-filter: blur(2px); }
+/* Der nachklappernde Klick eines Fingertipps soll das Blatt, das er gerade
+   geoeffnet hat, nicht gleich wieder schliessen. */
+.scrim.fresh, .sheet.fresh { pointer-events: none; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   max-height: 88dvh;
@@ -401,7 +406,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
   padding: 14px 14px 10px; border-bottom: 1px solid var(--line);
 }
-.sheet-head h2 { flex: 1 1 auto; }
+.sheet-head h2 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insp-head { gap: 8px; }
+.headtools { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.headtools .btn.sq { width: 40px; min-height: 38px; padding: 0; display: grid; place-items: center; font-size: 1.1rem; }
+.stepper.tight { border-radius: 9px; }
+.stepper.tight .btn.step { min-width: 32px; min-height: 38px; font-size: 1.05rem; }
+.stepper.tight .stepval { padding: 0 3px; font-size: .78rem; }
+.stepper.tight .stepval i { font-style: normal; color: var(--muted); margin-right: 3px; }
 .sheet-body {
   flex: 1 1 auto; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch;
   padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
@@ -422,6 +434,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 .row.wrap { flex-wrap: wrap; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid-na { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 8px; align-items: end; }
 
 .field { display: grid; gap: 5px; margin: 10px 0; }
 .field > span { font-size: .78rem; color: var(--muted); }
@@ -449,6 +462,20 @@ input[type=color] { padding: 2px; height: 42px; }
 .statusbox { border: 1px solid var(--line); border-radius: 10px; background: #0a0e14; padding: 10px 12px; font-size: .84rem; display: grid; gap: 4px; }
 .statusbox b { font-weight: 650; }
 .statusbox .k { color: var(--muted); }
+
+/* Verbindung: je Zeile ein Gedanke, Felder wachsen mit */
+.connrow { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin: 10px 0 0; }
+.connrow .field { margin: 0; }
+.connrow .field.grow { flex: 1 1 140px; min-width: 0; }
+.connrow .field.port { flex: 0 0 82px; }
+.connrow .btn { flex: 0 0 auto; }
+.connrow .btn.grow { flex: 1 1 0; }
+.more { margin: 14px 0 0; border: 1px solid var(--line); border-radius: 10px; background: #0a0e14; }
+.more > summary { padding: 11px 13px; font-size: .86rem; font-weight: 650; cursor: pointer; }
+.more[open] > summary { border-bottom: 1px solid var(--line); }
+.more > :not(summary) { margin-left: 13px; margin-right: 13px; }
+.more > .steps { margin-top: 10px; }
+.more > .note:last-child { padding-bottom: 12px; }
 
 /* Menue- und Auswahllisten: eine Zeile = ein Ziel, gross genug fuer den Daumen */
 .menu { display: grid; gap: 8px; }
