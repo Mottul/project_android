@@ -433,7 +433,6 @@ export const PRESETS: Preset[] = [
       mode: 'lossless',
       resolution: 'source',
       hapChunks: 4,
-      stripAudio: false,
     },
   },
   {
@@ -451,7 +450,6 @@ export const PRESETS: Preset[] = [
       mode: 'lossless',
       resolution: 'source',
       hapChunks: 4,
-      stripAudio: false,
     },
   },
   {
@@ -469,7 +467,6 @@ export const PRESETS: Preset[] = [
       mode: 'lossless',
       resolution: 'source',
       hapChunks: 4,
-      stripAudio: true,
     },
   },
   {
@@ -522,7 +519,7 @@ export const PRESETS: Preset[] = [
       mode: 'quality',
       resolution: '480p',
       fps: 15,
-      stripAudio: true,
+      audioCodec: 'none',
     },
   },
   {

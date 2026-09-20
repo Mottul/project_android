@@ -197,7 +197,17 @@ export async function openFrameSource(file: File): Promise<FrameSource> {
         signalReady()
       },
     })
-    decoder.configure(config)
+    try {
+      decoder.configure(config)
+    } catch (err) {
+      decoder.close()
+      // Same as above: a config the probe accepted can still be refused here.
+      // Treating it as an unreadable source sends the job down the transcode
+      // path instead of failing it outright.
+      throw new UnsupportedSource(
+        `Der Decoder für ${track.codec} ließ sich nicht einrichten: ${(err as Error).message}`,
+      )
+    }
 
     const pending: Array<{ data: Uint8Array; cts: number; duration: number; sync: boolean }> = []
     mp4.onSamples = (_id, _user, batch) => {

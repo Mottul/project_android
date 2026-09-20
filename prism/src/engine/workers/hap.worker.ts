@@ -193,7 +193,7 @@ async function decodeAudio(
   v: OutputSettings['video'],
   signal: AbortSignal,
 ): Promise<AudioPayload | null> {
-  if (v.stripAudio || v.audioCodec === 'none') return null
+  if (v.audioCodec === 'none') return null
   if (!source.audio) return null
 
   post({ id, type: 'progress', progress: null, stage: 'Tonspur dekodieren' })

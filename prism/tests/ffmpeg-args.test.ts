@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { buildIntermediatePlan, buildPlan, type BuildContext } from '@/engine/ffmpeg-args'
 import { DEFAULT_SETTINGS, type OutputSettings, type VideoSettings } from '@/engine/types'
+import { PRESETS } from '@/lib/presets'
 
 /**
  * The ffmpeg command line is the part of Prism most likely to be quietly wrong:
@@ -180,16 +181,73 @@ describe('HAP Q Alpha via ffmpeg', () => {
 })
 
 describe('HAP intermediate', () => {
-  it('produces a decodable MP4 with no audio and no metadata', () => {
-    const plan = buildIntermediatePlan('input_source')
+  it('produces a decodable MP4 without metadata', () => {
+    const plan = buildIntermediatePlan('input_source', false)
     const args = plan.passes[0].args
 
     expect(plan.outputName).toBe('prism_hap_source.mp4')
     expect(flagValue(args, '-c:v')).toBe('libx264')
     expect(flagValue(args, '-crf')).toBe('12')
     expect(flagValue(args, '-pix_fmt')).toBe('yuv420p')
-    expect(args).toContain('-an')
     expect(flagValue(args, '-map_metadata')).toBe('-1')
+    expect(args).toContain('-an')
+  })
+
+  /*
+   * The picture has to be re-encoded to get past a decoder that cannot read
+   * the source, but the sound does not — and re-compressing a soundtrack on
+   * its way to an uncompressed one would be a loss nobody asked for.
+   */
+  it('carries the sound through losslessly when it is wanted', () => {
+    const args = buildIntermediatePlan('input_source', true).passes[0].args
+    expect(flagValue(args, '-c:a')).toBe('flac')
+    // FLAC in MP4 is what ffmpeg calls experimental.
+    expect(flagValue(args, '-strict')).toBe('-2')
+    expect(args).not.toContain('-an')
+  })
+})
+
+/*
+ * One field decides whether a file has sound. It used to be two — a codec and
+ * a separate strip flag — and a preset could set one without the other, which
+ * left the inspector showing a codec while the output came out silent.
+ */
+describe('sound is decided in one place', () => {
+  /*
+   * The pass that writes the finished file is the last one. A two-pass plan
+   * analyses first, and that pass is always silent by design.
+   */
+  const outputArgs = (video: Partial<VideoSettings>) => {
+    const passes = buildPlan(ctx(video)).passes
+    return passes[passes.length - 1].args
+  }
+
+  it('drops the track exactly when the codec says none', () => {
+    expect(outputArgs({ audioCodec: 'none' })).toContain('-an')
+    expect(outputArgs({ audioCodec: 'aac' })).not.toContain('-an')
+  })
+
+  it('agrees with every video preset', () => {
+    for (const preset of PRESETS.filter((p) => p.family === 'video' && p.video)) {
+      // GIF has no sound to decide about.
+      const silent =
+        preset.video?.audioCodec === 'none' || preset.video?.format === 'gif_anim'
+      expect(
+        outputArgs({ ...preset.video }).includes('-an'),
+        `${preset.id} should ${silent ? '' : 'not '}be silent`,
+      ).toBe(silent)
+    }
+  })
+
+  it('never writes sound into a GIF, whatever the codec says', () => {
+    expect(outputArgs({ format: 'gif_anim', codec: 'gif', audioCodec: 'aac' })).toContain('-an')
+  })
+
+  it('keeps the analysis pass of a two-pass plan silent', () => {
+    const passes = buildPlan(ctx({ mode: 'size', targetSizeMB: 10, twoPass: true })).passes
+    expect(passes).toHaveLength(2)
+    expect(passes[0].args).toContain('-an')
+    expect(passes[1].args).not.toContain('-an')
   })
 })
 

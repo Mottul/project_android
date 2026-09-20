@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import {
+  AUDIO_CODECS,
   codecsFor,
   FAMILY_VAR,
   FORMATS,
@@ -173,6 +174,7 @@ function InspectorControls() {
       {focusFamily === 'image' && <ImageQuality />}
       {focusFamily === 'audio' && <AudioQuality />}
 
+      {focusFamily === 'video' && <VideoAudio />}
       {focusFamily === 'video' && <VideoAdvanced />}
     </div>
   )
@@ -371,13 +373,6 @@ function VideoQuality() {
             marks={['1', '8']}
           />
         </Field>
-
-        <Toggle
-          checked={!v.stripAudio}
-          onChange={(keep) => patchVideo({ stripAudio: !keep, audioCodec: keep ? 'pcm' : 'none' })}
-          label="Tonspur übernehmen"
-          hint="Als unkomprimiertes PCM, 16 Bit. Alles andere müsste der Medienserver beim Abspielen dekodieren — genau das, was HAP vermeiden soll."
-        />
 
         <ResolutionControls />
       </Section>
@@ -691,6 +686,98 @@ function AudioQuality() {
 }
 
 /* ===========================================================================
+   Sound track - video
+   ======================================================================== */
+
+const AUDIO_CODECS_FOR_VIDEO = [
+  { value: 'aac', label: 'AAC' },
+  { value: 'mp3', label: 'MP3' },
+  { value: 'opus', label: 'Opus' },
+  { value: 'flac', label: 'FLAC — verlustfrei' },
+  { value: 'pcm', label: 'PCM — unkomprimiert' },
+  { value: 'copy', label: 'Unverändert übernehmen' },
+  { value: 'none', label: 'Kein Ton' },
+]
+
+/**
+ * Everything about the sound, in one place.
+ *
+ * It used to be two: a toggle in the HAP quality block and a codec picker
+ * buried in "Erweitert". Whoever wanted a silent H.264 had to know to open a
+ * disclosure panel, and the two controls could disagree with each other.
+ */
+function VideoAudio() {
+  const settings = useAppStore((s) => s.settings)
+  const patchVideo = useAppStore((s) => s.patchVideo)
+  const v = settings.video
+
+  const silent = v.audioCodec === 'none'
+  const hap = hapVariantFor(v.codec)
+
+  if (v.format === 'gif_anim') {
+    return (
+      <Section title="Tonspur">
+        <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-faint">
+          <Info size={12} className="mt-[1px] shrink-0" />
+          GIF kennt keinen Ton. Die Tonspur entfällt.
+        </p>
+      </Section>
+    )
+  }
+
+  if (v.codec === 'copy') {
+    return (
+      <Section title="Tonspur">
+        <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-faint">
+          <Info size={12} className="mt-[1px] shrink-0" />
+          Stream Copy übernimmt die Tonspur unverändert mit.
+        </p>
+      </Section>
+    )
+  }
+
+  // HAP has exactly one sensible answer, so it gets a switch rather than a
+  // menu: anything compressed would have to be decoded during playback, which
+  // is the cost the format exists to avoid.
+  if (hap) {
+    return (
+      <Section title="Tonspur">
+        <Toggle
+          checked={!silent}
+          onChange={(keep) => patchVideo({ audioCodec: keep ? 'pcm' : 'none' })}
+          label="Ton übernehmen"
+          hint="Als unkomprimiertes PCM, 16 Bit — das, was ein Medienserver neben einer HAP-Spur erwartet."
+        />
+      </Section>
+    )
+  }
+
+  return (
+    <Section title="Tonspur">
+      <Field label="Format">
+        <Select
+          value={v.audioCodec}
+          options={AUDIO_CODECS_FOR_VIDEO}
+          onChange={(audioCodec) => patchVideo({ audioCodec })}
+        />
+      </Field>
+
+      {!silent && v.audioCodec !== 'copy' && !AUDIO_CODECS[v.audioCodec]?.lossless && (
+        <Field label="Bitrate" hint="128 kbit/s reichen für Musik meist aus, 64 für Sprache.">
+          <NumberInput
+            value={v.audioBitrateKbps}
+            min={8}
+            max={640}
+            suffix="kbit/s"
+            onChange={(audioBitrateKbps) => patchVideo({ audioBitrateKbps })}
+          />
+        </Field>
+      )}
+    </Section>
+  )
+}
+
+/* ===========================================================================
    Advanced - video
    ======================================================================== */
 
@@ -764,27 +851,8 @@ function VideoAdvanced() {
       {isNativeHap && (
         <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-faint">
           <Info size={12} className="mt-[1px] shrink-0" />
-          HAP schreibt Prism selbst, ohne ffmpeg. Der Ton geht immer als PCM mit; Zweipass und
-          Faststart gibt es hier nicht.
+          HAP schreibt Prism selbst, ohne ffmpeg. Zweipass und Faststart gibt es hier nicht.
         </p>
-      )}
-
-      {!isCopy && !isNativeHap && (
-        <Field label="Tonspur">
-          <Select
-            value={v.audioCodec}
-            options={[
-              { value: 'aac', label: 'AAC' },
-              { value: 'mp3', label: 'MP3' },
-              { value: 'opus', label: 'Opus' },
-              { value: 'flac', label: 'FLAC — verlustfrei' },
-              { value: 'pcm', label: 'PCM — unkomprimiert' },
-              { value: 'copy', label: 'Unverändert übernehmen' },
-              { value: 'none', label: 'Kein Ton' },
-            ]}
-            onChange={(audioCodec) => patchVideo({ audioCodec })}
-          />
-        </Field>
       )}
 
       {!isNativeHap && (

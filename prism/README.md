@@ -116,7 +116,8 @@ ist eigener Code — als WebGPU-Compute-Shader, wo es eine Karte gibt, sonst auf
 der CPU. Ton geht als unkomprimiertes PCM mit. Die beiden Engines treffen sich
 an genau einer Stelle: wenn `VideoDecoder` die Quelle nicht lesen kann (ProRes,
 Matroska), erzeugt ffmpeg ein Zwischenformat, aus dem der HAP-Worker
-weiterarbeitet. Siehe [`docs/hap.md`](docs/hap.md).
+weiterarbeitet — das Bild neu kodiert, den Ton verlustfrei. Siehe
+[`docs/hap.md`](docs/hap.md).
 
 ### Hardwarebeschleunigung
 
@@ -301,9 +302,7 @@ Der Deploy-Workflow führt beide plus `tsc` aus, bevor er veröffentlicht.
    Größenlimit und der Faktor 10 bei der Dauer.
 2. **Erweiterter ffmpeg-Kern** — ProRes, DNxHR, HAP Q Alpha. Siehe
    [`docs/hap.md`](docs/hap.md).
-3. **Ton auch über den ffmpeg-Umweg** — braucht das Video ein Zwischenformat,
-   geht die Tonspur derzeit verloren.
-4. **Zuschneiden und Trimmen in der Oberfläche** — die Einstellungen
+3. **Zuschneiden und Trimmen in der Oberfläche** — die Einstellungen
    (`trimStart`, `trimEnd`) und die ffmpeg-Argumente existieren bereits, es fehlt
    nur die Bedienung.
 
