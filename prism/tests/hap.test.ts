@@ -7,7 +7,7 @@ import {
   splitIntoChunks,
   writeSectionHeader,
 } from '../src/engine/hap/hap-frame'
-import { findDecoderSpecificInfo, opusHeadFrom } from '../src/engine/hap/audio'
+import { findDecoderSpecificInfo, flacHeaderFrom, opusHeadFrom } from '../src/engine/hap/audio'
 import { snappyCompress } from '../src/engine/hap/snappy'
 import { buildFtyp, buildMdatHeader, buildMoov } from '../src/engine/hap/mov'
 import {
@@ -981,5 +981,21 @@ describe('MOV with sound', () => {
     const [mdatStart, mdatEnd] = findBox(flat, ['mdat'])
     expect(mdatEnd - mdatStart).toBe(8 + 100 + audio.info.byteLength)
     expect(layout.totalBytes).toBe(flat.length)
+  })
+})
+
+describe('FLAC configuration', () => {
+  it('puts the fLaC magic in front of the metadata blocks', () => {
+    // A dfLa box: version and flags, then a last-block STREAMINFO header.
+    const dfLa = new Uint8Array([0, 0, 0, 0, 0x80, 0x00, 0x00, 0x22, ...new Array(34).fill(7)])
+    const header = flacHeaderFrom(dfLa)!
+
+    expect(String.fromCharCode(...header.subarray(0, 4))).toBe('fLaC')
+    expect(Array.from(header.subarray(4, 8))).toEqual([0x80, 0x00, 0x00, 0x22])
+    expect(header.length).toBe(4 + dfLa.length - 4)
+  })
+
+  it('refuses a dfLa with no blocks in it', () => {
+    expect(flacHeaderFrom(new Uint8Array([0, 0, 0, 0]))).toBeNull()
   })
 })

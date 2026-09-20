@@ -130,14 +130,19 @@ lässt, kostet eine Warnung und eine stumme Datei — wer zwanzig Minuten auf ei
 Zwei-Gigabyte-Texturdatei gewartet hat, soll sie nicht wegen des Soundtracks
 verlieren.
 
-Zwei Fallstricke stecken im Vorlauf der Encoder:
+Drei Fallstricke, die alle erst die Messung am erzeugten PCM sichtbar gemacht
+hat:
 
 - **Opus** schreibt seinen Pre-Skip in den eigenen Identifikationsheader, und
   der Decoder zieht ihn selbst ab. Ihn hier noch einmal abzuziehen schneidet
-  den Anfang des Programms ab — ein Fehler, den erst die Messung am erzeugten
-  PCM sichtbar gemacht hat.
+  den Anfang des Programms ab.
 - **AAC** sagt seinem Decoder nichts und überlässt die Verzögerung der Edit
   List des Containers. Die ist damit unsere.
+- **FLAC** will als `description` den Stream-Header, also das `fLaC`-Magic vor
+  den Metadatenblöcken — die MP4-Box enthält nur die Blöcke. Ohne das Magic
+  nimmt `isConfigSupported` die Konfiguration an und der Decoder lehnt sie
+  später ab, asynchron, beim ersten Paket. Deshalb wird jetzt auch ein
+  abgelehnter `flush()` als Warnung behandelt statt als Fehler.
 
 Das gesamte PCM steht in einem Stück hinter dem letzten Bild. Verschränken
 würde einem Player entgegenkommen, der die Datei linear liest — aber ein
@@ -147,11 +152,16 @@ wäre fast vollständig Video, und alles, was HAP liest, geht über den Index.
 ### Quellen, die der Browser nicht liest
 
 `VideoDecoder` kennt kein ProRes und kein DNxHD, und mp4box liest kein
-Matroska. Für solche Dateien erzeugt Prism zuerst ein Zwischenformat
-(H.264, CRF 12) über ffmpeg.wasm und kodiert daraus nach HAP. Der Job sagt das
-als Warnung dazu — ein Qualitätsverlust, den niemand gewählt hat, muss sichtbar
-sein. Verlustfrei geht es nur über eine MP4- oder MOV-Quelle, die der Browser
-direkt dekodiert.
+Matroska. Für solche Dateien erzeugt Prism zuerst ein Zwischenformat über
+ffmpeg.wasm und kodiert daraus nach HAP. Der Job sagt das als Warnung dazu —
+ein Qualitätsverlust, den niemand gewählt hat, muss sichtbar sein.
+
+Das **Bild** wird dabei einmal neu kodiert (H.264, CRF 12 — auf Transparenz
+gewählt, nicht auf Effizienz). Der **Ton** nicht: er geht als FLAC durch das
+Zwischenformat, also verlustfrei. FLAC in MP4 gilt ffmpeg als experimentell und
+braucht `-strict -2`, aber die Datei verlässt diesen Rechner nie, und einen
+Soundtrack auf dem Weg zu unkomprimiertem PCM zweimal zu komprimieren wäre
+absurd.
 
 ### Speicher
 
@@ -173,9 +183,8 @@ letzte Bild warten muss.
   mehr; dann begrenzt der Decoder.
 - **Ton nur, was der Browser dekodiert.** AAC, MP3 und Opus ja, exotischere
   Spuren nicht. Dann gibt es eine Warnung und eine stumme Datei.
-- **Kein Zwischenformat mit Ton.** Braucht das Video den ffmpeg-Umweg
-  (ProRes, Matroska), geht die Tonspur dabei verloren — das Zwischenformat
-  wird ohne Ton erzeugt.
+- **Bildverlust über den ffmpeg-Umweg.** Braucht das Video das Zwischenformat,
+  wird es einmal neu kodiert. Der Ton bleibt verlustfrei.
 
 ## Wenn doch ein eigener Core gebaut werden soll
 

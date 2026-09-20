@@ -136,7 +136,7 @@ function bitrateForTargetSize(
 
 function audioArgs(ctx: BuildContext, warnings: string[]): string[] {
   const v = ctx.settings.video
-  if (v.stripAudio || v.audioCodec === 'none') return ['-an']
+  if (v.audioCodec === 'none') return ['-an']
   if (!ctx.probe?.audioCodec && ctx.family === 'video') return ['-an']
 
   const codec = AUDIO_CODECS[v.audioCodec]
@@ -255,6 +255,9 @@ function buildGifPlan(ctx: BuildContext, warnings: string[]): FFmpegPlan {
 
   warnings.push('GIF kann nur 256 Farben — Verläufe werden sichtbar abgestuft.')
 
+  // `-an` is said out loud rather than left to the muxer: the format has no
+  // sound at all, and an implicit drop is one more thing to wonder about when
+  // a file comes out silent.
   return {
     passes: [
       {
@@ -262,6 +265,7 @@ function buildGifPlan(ctx: BuildContext, warnings: string[]): FFmpegPlan {
         weight: 0.35,
         args: [
           ...pre, '-i', ctx.inputName, ...post,
+          '-an',
           '-vf', `${chain},palettegen=stats_mode=diff`,
           '-y', 'palette.png',
         ],
@@ -272,6 +276,7 @@ function buildGifPlan(ctx: BuildContext, warnings: string[]): FFmpegPlan {
         args: [
           ...pre, '-i', ctx.inputName, ...post,
           '-i', 'palette.png',
+          '-an',
           '-lavfi',
           `${chain}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
           '-loop', '0',
@@ -358,7 +363,7 @@ export function buildPlan(ctx: BuildContext): FFmpegPlan {
   if (v.mode === 'bitrate') {
     bitrateKbps = v.bitrateKbps
   } else if (v.mode === 'size') {
-    const audioKbps = v.stripAudio || v.audioCodec === 'none' ? 0 : v.audioBitrateKbps
+    const audioKbps = v.audioCodec === 'none' ? 0 : v.audioBitrateKbps
     const derived = bitrateForTargetSize(
       v.targetSizeMB,
       ctx.probe?.durationSec ?? 0,
@@ -454,9 +459,16 @@ function quoteIfNeeded(arg: string): string {
  *
  * `yuv420p` is not a compromise here — the DXT compressor subsamples chroma far
  * more aggressively than 4:2:0 already does.
+ *
+ * The sound, by contrast, is carried through losslessly. FLAC in MP4 is what
+ * ffmpeg calls experimental and needs `-strict -2`, but the file never leaves
+ * this machine and `AudioDecoder` reads it — and re-encoding a soundtrack twice
+ * for a format whose entire point is uncompressed audio would be absurd.
  */
-export function buildIntermediatePlan(inputName: string): FFmpegPlan {
+export function buildIntermediatePlan(inputName: string, keepAudio: boolean): FFmpegPlan {
   const outputName = 'prism_hap_source.mp4'
+  const audio = keepAudio ? ['-c:a', 'flac', '-strict', '-2'] : ['-an']
+
   return finalize({
     passes: [
       {
@@ -466,7 +478,6 @@ export function buildIntermediatePlan(inputName: string): FFmpegPlan {
           '-hide_banner',
           '-i',
           inputName,
-          '-an',
           '-sn',
           '-dn',
           '-map_metadata',
@@ -479,6 +490,7 @@ export function buildIntermediatePlan(inputName: string): FFmpegPlan {
           '12',
           '-pix_fmt',
           'yuv420p',
+          ...audio,
           '-movflags',
           '+faststart',
           outputName,

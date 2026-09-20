@@ -350,13 +350,14 @@ export class Scheduler {
 
       this.deps.onUpdate(job.id, {
         warning:
-          `${outcome.reason} Die Datei wird zuerst nach H.264 umgewandelt und dann ` +
-          `nach HAP kodiert. Das kostet einmal Qualität — ein verlustfreier Weg ` +
-          `führt hier nur über eine MP4- oder MOV-Quelle, die der Browser direkt liest.`,
+          `${outcome.reason} Das Bild wird deshalb zuerst nach H.264 umgewandelt und ` +
+          `dann nach HAP kodiert — das kostet einmal Qualität. Die Tonspur geht ` +
+          `verlustfrei mit. Ohne Umweg ginge es nur mit einer MP4- oder MOV-Quelle, ` +
+          `die der Browser direkt liest.`,
         stage: 'Zwischenformat erzeugen',
       })
 
-      const intermediate = await this.transcodeForHap(job)
+      const intermediate = await this.transcodeForHap(job, settings)
       if (this.cancelled.has(job.id)) throw new FFmpegCancelled()
       await this.runHapJob(job, settings, startedAt, intermediate)
     } catch (err) {
@@ -448,12 +449,15 @@ export class Scheduler {
   }
 
   /** Decode-only intermediate: whatever ffmpeg can read, as H.264 in MP4. */
-  private async transcodeForHap(job: Job): Promise<File> {
+  private async transcodeForHap(job: Job, settings: OutputSettings): Promise<File> {
     const caps = this.deps.getCapabilities()
     await ffmpegRunner.load(Boolean(caps?.sharedArrayBuffer), this.deps.onLog)
     if (this.cancelled.has(job.id)) throw new FFmpegCancelled()
 
-    const plan = buildIntermediatePlan(FFmpegRunner.inputPathFor(job.file))
+    const plan = buildIntermediatePlan(
+      FFmpegRunner.inputPathFor(job.file),
+      settings.video.audioCodec !== 'none',
+    )
     for (const line of plan.commandLine.split('\n')) this.deps.onLog?.(`$ ${line}`)
 
     const result = await ffmpegRunner.run(job.file, plan, {

@@ -109,6 +109,25 @@ export function opusHeadFrom(dOps: Uint8Array): Uint8Array | null {
   return head
 }
 
+/**
+ * Rebuild a FLAC identification header from the `dfLa` box.
+ *
+ * WebCodecs wants the stream's own header — the `fLaC` magic followed by the
+ * metadata blocks — while the MP4 box stores the blocks alone behind a
+ * full-box version field. Handing over the blocks without the magic is the
+ * kind of mistake that survives `isConfigSupported`: the decoder accepts the
+ * configuration and only rejects it later, asynchronously, when the first
+ * packet arrives.
+ */
+export function flacHeaderFrom(dfLa: Uint8Array): Uint8Array | null {
+  if (dfLa.length <= 4) return null
+  const blocks = dfLa.subarray(4)
+  const out = new Uint8Array(4 + blocks.length)
+  out.set([0x66, 0x4c, 0x61, 0x43], 0) // "fLaC"
+  out.set(blocks, 4)
+  return out
+}
+
 function serialise(box: MP4ConfigBox): Uint8Array {
   const stream = new DataStream(undefined, 0, DataStream.BIG_ENDIAN)
   box.write(stream)
@@ -147,7 +166,7 @@ function describeAudio(mp4: MP4File, track: MP4Track): Uint8Array | null {
   for (const entry of trak?.mdia?.minf?.stbl?.stsd?.entries ?? []) {
     if (entry.esds) return findDecoderSpecificInfo(serialise(entry.esds))
     if (entry.dOps) return opusHeadFrom(serialise(entry.dOps))
-    if (entry.dfLa) return serialise(entry.dfLa).subarray(4)
+    if (entry.dfLa) return flacHeaderFrom(serialise(entry.dfLa))
   }
   // MP3 and raw PCM carry no configuration at all.
   return null
@@ -279,7 +298,17 @@ export async function decodeAudioTrack(
     },
   })
 
-  decoder.configure(config)
+  try {
+    decoder.configure(config)
+  } catch (err) {
+    // `isConfigSupported` answering yes is not a promise that `configure`
+    // will accept the same object — a description the decoder dislikes only
+    // surfaces here. Either way it is a warning, never a failed job.
+    decoder.close()
+    throw new NoUsableAudio(
+      `Die Tonspur (${track.codec}) ließ sich nicht einrichten: ${(err as Error).message}`,
+    )
+  }
 
   const packets: Array<{ data: Uint8Array; cts: number; duration: number }> = []
   mp4.onSamples = (_id, _user, batch) => {
@@ -314,6 +343,11 @@ export async function decodeAudioTrack(
       if (i % 64 === 0) onProgress?.(i / packets.length)
     }
     if (!signal.aborted && !failed.error) await decoder.flush()
+  } catch (err) {
+    // WebCodecs reports a configuration it cannot honour asynchronously, so a
+    // rejected flush is where a bad description surfaces. It still only costs
+    // the soundtrack, never the job.
+    failed.error ??= err instanceof Error ? err : new Error(String(err))
   } finally {
     if (decoder.state !== 'closed') decoder.close()
     mp4.onSamples = null

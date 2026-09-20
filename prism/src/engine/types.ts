@@ -33,6 +33,14 @@ export interface VideoSettings {
   /** Format id from the registry, e.g. 'mp4'. */
   format: string
   codec: string
+  /**
+   * How the sound is written, or 'none' for a silent file.
+   *
+   * Deliberately the only place that decides: a separate "strip audio" flag
+   * alongside it meant two sources of the same truth, and a preset could set
+   * one without the other — leaving the inspector showing a codec while the
+   * output came out silent.
+   */
   audioCodec: string
 
   mode: QualityMode
@@ -58,7 +66,6 @@ export interface VideoSettings {
   trimStart: number
   trimEnd: number
 
-  stripAudio: boolean
   stripMetadata: boolean
   /** MP4 only: move the moov atom to the front for instant web playback. */
   faststart: boolean
@@ -126,7 +133,6 @@ export const DEFAULT_SETTINGS: OutputSettings = {
     twoPass: false,
     trimStart: 0,
     trimEnd: 0,
-    stripAudio: false,
     stripMetadata: false,
     faststart: true,
     hapChunks: 4,
