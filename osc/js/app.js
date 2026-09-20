@@ -8,7 +8,7 @@
 
 import {
   makeWidget, makePage, normalizePage, normalizeProject, autoArrange, dropAt, placeCopy,
-  usedRows, rescale, findSlot, clamp, TYPES, TYPE_ORDER, MIN_COLS, MAX_COLS,
+  usedRows, recolumn, findSlot, clamp, minSize, TYPES, TYPE_ORDER, MIN_COLS, MAX_COLS, MAX_ROWS,
 } from './model.js';
 import { PRESETS, buildPreset, starterProject } from './presets.js';
 import { createWidget, setHaptics } from './widgets.js';
@@ -21,7 +21,7 @@ import {
   loadLibrary, storeInLibrary, removeFromLibrary,
 } from './store.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -359,9 +359,25 @@ const SHEETS = ['#sheetMenu', '#sheetPages', '#sheetConn', '#sheetMonitor', '#sh
   '#sheetSettings', '#sheetReset', '#sheetHelp', '#sheetPick', '#sheetInsp'];
 let sheetStack = [];
 
+/**
+ * Nach einem Tipp mit dem Finger schickt der Browser noch einen `click`
+ * hinterher — der landet auf dem Blatt, das der Tipp gerade geoeffnet hat,
+ * und schloss es sofort wieder (auf dem Scrim) oder loeste dort etwas aus.
+ * Deshalb ist ein frisch geoeffnetes Blatt einen Wimpernschlag lang
+ * unempfindlich; danach nimmt das `fresh` weg.
+ */
+const GHOST_MS = 320;
+let ghostTimer = 0;
+
 function showSheet(sel) {
   for (const s of SHEETS) $(s).hidden = s !== sel;
   $('#scrim').hidden = !sel;
+  clearTimeout(ghostTimer);
+  const fresh = [$('#scrim'), ...(sel ? [$(sel)] : [])];
+  for (const n of [$('#scrim'), ...SHEETS.map((x) => $(x))]) n.classList.remove('fresh');
+  if (!sel) return;
+  for (const n of fresh) n.classList.add('fresh');
+  ghostTimer = setTimeout(() => { for (const n of fresh) n.classList.remove('fresh'); }, GHOST_MS);
 }
 
 /** Blatt oeffnen; `stack` = aus einem anderen Blatt heraus (Pfeil zurueck). */
@@ -400,6 +416,52 @@ function prepareSheet(sel) {
   if (sel === '#sheetPick') renderPicker();
 }
 
+/** Groesse und Ausrichtung sitzen in der Kopfzeile des Blattes. */
+function paintInspHead(w, page, onChange) {
+  const box = $('#inspHead');
+  box.replaceChildren();
+  const m = minSize(w.type);
+  const step = (label, get, set, lo, hi) => {
+    const wrap = document.createElement('span');
+    wrap.className = 'stepper tight';
+    const mk = (txt, delta, aria) => {
+      const b = document.createElement('button');
+      b.className = 'btn step';
+      b.type = 'button';
+      b.textContent = txt;
+      b.setAttribute('aria-label', `${label} ${aria}`);
+      b.addEventListener('click', () => { set(clamp(get() + delta, lo, hi)); onChange(); paintInspHead(w, page, onChange); });
+      return b;
+    };
+    const out = document.createElement('span');
+    out.className = 'stepval';
+    out.innerHTML = `<i>${label}</i>`;
+    const b = document.createElement('b');
+    b.textContent = String(get());
+    out.append(b);
+    wrap.append(mk('−', -1, 'kleiner'), out, mk('+', 1, 'groesser'));
+    return wrap;
+  };
+  box.append(
+    step('B', () => w.cw, (v) => { w.cw = v; }, m.cw, page.columns),
+    step('H', () => w.ch, (v) => { w.ch = v; }, m.ch, MAX_ROWS),
+  );
+  if (w.type === 'fader' || w.type === 'color') {
+    const b = document.createElement('button');
+    b.className = 'btn sq';
+    b.type = 'button';
+    b.textContent = w.orient === 'h' ? '↔' : '↕';
+    b.title = w.orient === 'h' ? 'waagerecht' : 'senkrecht';
+    b.setAttribute('aria-label', `Ausrichtung: ${b.title}`);
+    b.addEventListener('click', () => {
+      w.orient = w.orient === 'h' ? 'v' : 'h';
+      onChange();
+      paintInspHead(w, page, onChange);
+    });
+    box.append(b);
+  }
+}
+
 function openInspector(w) {
   const page = currentPage();
   const title = () => { $('#inspTitle').textContent = w.label || TYPES[w.type].name; };
@@ -408,11 +470,17 @@ function openInspector(w) {
   // waere jeder Buchstabe sonst ein eigener Schritt zurueck.
   const before = snapshotPage();
   let noted = false;
+  const headChange = () => {
+    if (!noted) { pushUndo('Einstellungen', before); noted = true; }
+    persist(); renderSurface(); setSelection(w.id);
+  };
+  paintInspHead(w, page, headChange);
   buildInspector($('#inspBody'), w, page, {
     onChange: () => {
       if (!noted) { pushUndo('Einstellungen', before); noted = true; }
       persist(); renderSurface(); setSelection(w.id); title();
     },
+    onHead: () => paintInspHead(w, page, headChange),
     onDelete: () => { deleteWidget(w); closeSheet(); },
     onDuplicate: () => openInspector(duplicateSelected(w)),
   });
@@ -593,7 +661,7 @@ function setColumns(cols) {
   const next = clamp(cols, MIN_COLS, MAX_COLS);
   if (next === page.columns) return;
   pushUndo('Spalten');
-  rescale(page, next);
+  recolumn(page, next);
   $('#colOut').textContent = next;
   persist();
   renderSurface();

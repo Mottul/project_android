@@ -11,7 +11,7 @@
  *    kein Doppeltipp-Zoom, kein verlorener Finger.
  */
 
-import { clamp, clamp01, BASE_COLORS } from './model.js';
+import { clamp, clamp01, defaultPalette, hsv2rgb, rgb2hsv } from './model.js';
 
 const HOLD = 40;    // px seitlich -> feiner Griff
 const HOLD2 = 120;  // px seitlich -> sehr feiner Griff
@@ -549,22 +549,34 @@ export function createWidget(w, ctx) {
                         { type: 'f', value: w.b }, { type: 'f', value: w.a }];
     const emit = (now) => send(w.address, rgba(), now);
 
-    /** Ein Kanalregler (waagerecht, relativ wie alles andere). */
-    const addChannel = (ch) => {
+    // Farbton und Saettigung muessen gemerkt werden: bei Schwarz oder Grau
+    // stecken sie nicht mehr in R/G/B, und ohne Gedaechtnis springt der
+    // Regler beim Aufdrehen auf Rot zurueck.
+    let hsv = rgb2hsv(w.r, w.g, w.b);
+    const fromHsv = () => {
+      const c = hsv2rgb(hsv.h, hsv.s, hsv.v);
+      w.r = c.r; w.g = c.g; w.b = c.b;
+    };
+
+    /**
+     * Ein Kanalregler (waagerecht, relativ wie alles andere).
+     * `get`/`set` arbeiten in 0..1; die Anzeige faerbt sich ueber `--g`.
+     */
+    const addChannel = (key, label, get, set) => {
       const row = el('div', 'crow');
-      const tag = el('span', 'ctag', ch.toUpperCase());
-      const track = el('div', `ctrack c-${ch}`);
+      const tag = el('span', 'ctag', label);
+      const track = el('div', `ctrack c-${key}`);
       const fill = el('div', 'cfill');
       track.append(fill);
       row.append(tag, track);
       rows.append(row);
-      bars[ch] = fill;
+      bars[key] = { fill, track, get };
       drag(track, {
         axis: 'x',
         onStart: () => { touching = true; },
         onMove: (dx, dy, fine) => {
           const r = track.getBoundingClientRect();
-          w[ch] = clamp01(w[ch] + (dx / Math.max(1, r.width)) * fine);
+          set(clamp01(get() + (dx / Math.max(1, r.width)) * fine));
           api.paint();
           emit(false);
         },
@@ -577,25 +589,30 @@ export function createWidget(w, ctx) {
       });
     };
 
-    let picker = null;
     let chips = [];
 
-    if (w.colorMode === 'basic') {
-      // Grundfarben zum Antippen — am Pult schneller als drei Regler.
+    if (w.colorMode === 'hsv') {
+      addChannel('h', 'H', () => hsv.h / 360, (v) => { hsv.h = v * 360; fromHsv(); });
+      addChannel('s', 'S', () => hsv.s, (v) => { hsv.s = v; fromHsv(); });
+      addChannel('v', 'V', () => hsv.v, (v) => { hsv.v = v; fromHsv(); });
+      addChannel('a', 'A', () => w.a, (v) => { w.a = v; });
+    } else if (w.colorMode === 'palette') {
+      // Eigene Palette — am Pult schneller als jeder Regler.
       rows.classList.add('compact');
       const grid = el('div', 'cgrid');
       rows.append(grid);
-      for (const [name, hex] of BASE_COLORS) {
+      for (const hex of (w.palette.length ? w.palette : defaultPalette())) {
         const b = el('button', 'chip');
         b.type = 'button';
         b.style.background = hex;
-        b.title = name;
-        b.setAttribute('aria-label', name);
+        b.title = hex;
+        b.setAttribute('aria-label', hex);
         b.dataset.hex = hex.toLowerCase();
         b.addEventListener('click', () => {
           w.r = parseInt(hex.slice(1, 3), 16) / 255;
           w.g = parseInt(hex.slice(3, 5), 16) / 255;
           w.b = parseInt(hex.slice(5, 7), 16) / 255;
+          hsv = rgb2hsv(w.r, w.g, w.b);
           api.paint();
           tick();
           emit(true);
@@ -604,36 +621,27 @@ export function createWidget(w, ctx) {
         grid.append(b);
         chips.push(b);
       }
-      addChannel('a');
-    } else if (w.colorMode === 'picker') {
-      // Farbwaehler des Geraets: eine Flaeche, ein Griff, jeder Ton erreichbar.
-      rows.classList.add('compact');
-      picker = el('input');
-      picker.type = 'color';
-      picker.className = 'cpick';
-      picker.setAttribute('aria-label', 'Farbe waehlen');
-      const fromPicker = (now) => {
-        const v = picker.value;
-        w.r = parseInt(v.slice(1, 3), 16) / 255;
-        w.g = parseInt(v.slice(3, 5), 16) / 255;
-        w.b = parseInt(v.slice(5, 7), 16) / 255;
-        api.paint();
-        emit(now);
-      };
-      picker.addEventListener('input', () => fromPicker(false));
-      picker.addEventListener('change', () => { fromPicker(true); ctx.commit(); });
-      rows.append(picker);
-      addChannel('a');
+      addChannel('a', 'A', () => w.a, (v) => { w.a = v; });
     } else {
-      for (const ch of ['r', 'g', 'b', 'a']) addChannel(ch);
+      addChannel('r', 'R', () => w.r, (v) => { w.r = v; hsv = rgb2hsv(w.r, w.g, w.b); });
+      addChannel('g', 'G', () => w.g, (v) => { w.g = v; hsv = rgb2hsv(w.r, w.g, w.b); });
+      addChannel('b', 'B', () => w.b, (v) => { w.b = v; hsv = rgb2hsv(w.r, w.g, w.b); });
+      addChannel('a', 'A', () => w.a, (v) => { w.a = v; });
     }
 
     api.paint = () => {
       const c = (v) => Math.round(clamp01(v) * 255);
       swatch.style.background = `rgb(${c(w.r)} ${c(w.g)} ${c(w.b)} / ${w.a})`;
-      for (const ch of Object.keys(bars)) bars[ch].style.width = `${w[ch] * 100}%`;
+      for (const key of Object.keys(bars)) bars[key].fill.style.width = `${bars[key].get() * 100}%`;
+      // Saettigung und Helligkeit zeigen den Verlauf zum aktuellen Farbton.
+      if (bars.s || bars.v) {
+        const pure = hsv2rgb(hsv.h, 1, 1);
+        const rein = `rgb(${c(pure.r)} ${c(pure.g)} ${c(pure.b)})`;
+        const voll = hsv2rgb(hsv.h, hsv.s, 1);
+        bars.s?.track.style.setProperty('--g', `linear-gradient(90deg, #fff, ${rein})`);
+        bars.v?.track.style.setProperty('--g', `linear-gradient(90deg, #000, rgb(${c(voll.r)} ${c(voll.g)} ${c(voll.b)}))`);
+      }
       const hex = rgbHex();
-      if (picker && picker.value !== hex) picker.value = hex;
       for (const b of chips) b.classList.toggle('on', b.dataset.hex === hex);
       val.textContent = hex;
     };
@@ -644,6 +652,7 @@ export function createWidget(w, ctx) {
       if (typeof g === 'number') w.g = clamp01(g);
       if (typeof b === 'number') w.b = clamp01(b);
       if (typeof a === 'number') w.a = clamp01(a);
+      hsv = rgb2hsv(w.r, w.g, w.b);
       api.paint();
     };
   }

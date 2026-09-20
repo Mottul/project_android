@@ -14,11 +14,13 @@ installierbar, ohne Konto und ohne Cloud.
   steht im Zifferblatt.
 * **Ablesbar im Halbdunkel.** Beim Fader steht der Wert in der Bahn und bleibt
   lesbar, wenn der Balken darueberlaeuft; oben hat dadurch der Name Platz (bis
-  zu zwei Zeilen). **Farbe** gibt es als R/G/B-Regler, als Feld aus Grundfarben
-  oder mit dem Farbwaehler des Geraets — jeweils mit Deckkraft.
+  zu zwei Zeilen). **Farbe** gibt es als R/G/B-Regler, als H/S/V-Regler
+  oder als Palette zum Antippen, die man sich selbst zusammenstellt — jeweils
+  mit Deckkraft.
 * **Freies Raster.** Kacheln verschieben und an der Ecke unten rechts aufziehen,
   4 bis 24 Spalten, „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen
-  (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest).
+  (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest). Beim Wechsel
+  der Spaltenzahl behalten die Kacheln ihre Groesse; von selbst waechst nichts.
 * **Mehrere Seiten** je Projekt, Vorlagen fuer MadMapper und NovaStar,
   Export/Import als JSON, Zuruecksetzen je Seite oder fuers ganze Projekt.
 * **Feedback.** Eingehendes OSC bewegt die Regler mit — ausser man haelt gerade
@@ -52,7 +54,8 @@ an. Die Stellung der Regler bleibt dabei unangetastet — zurueck geht der
 Aufbau, nicht das Pult.
 
 Die Einstellungen liegen in **Reitern** (Allgemein · Werte · Eintraege ·
-Groesse), sodass nichts gescrollt werden muss. **Duplizieren** zaehlt
+Palette), sodass nichts gescrollt werden muss; Breite, Hoehe und Ausrichtung
+stehen in der Kopfzeile des Blattes. Blaetter schliesst ein Tipp daneben. **Duplizieren** zaehlt
 Beschriftung und Adresse hoch (`/cues/1/recall` → `/cues/2/recall`) und legt
 die Kopie neben das Original — zwei Bauteile auf derselben Adresse entstehen so
 gar nicht erst.

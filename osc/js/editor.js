@@ -16,7 +16,8 @@
  * moeglich bleibt.
  */
 
-import { COLORS, clamp, fits, dropAt, minSize, MAX_ROWS, TYPES, bumpNumber, copyWidget } from './model.js';
+import { COLORS, clamp, fits, dropAt, minSize, MAX_ROWS, TYPES, bumpNumber, copyWidget,
+  defaultPalette } from './model.js';
 import { uiIcon } from './icons.js';
 
 const TAP_PX = 8;
@@ -231,32 +232,6 @@ function checkbox(label, checked, onchange) {
   return l;
 }
 
-/** Zahl mit − und + statt Tastatur — fuer Breite und Hoehe am Daumen. */
-function stepper(label, value, lo, hi, onchange) {
-  const box = el('div', 'field');
-  box.append(el('span', null, label));
-  const row = el('div', 'stepper wide');
-  const out = el('span', 'stepval');
-  const paint = (v) => { out.textContent = String(v); };
-  let v = value;
-  const set = (next) => {
-    v = clamp(Math.round(next), lo, hi);
-    paint(v);
-    onchange(v);
-  };
-  const mk = (txt, delta, aria) => {
-    const b = el('button', 'btn step', txt);
-    b.type = 'button';
-    b.setAttribute('aria-label', aria);
-    b.addEventListener('click', () => set(v + delta));
-    return b;
-  };
-  paint(v);
-  row.append(mk('−', -1, `${label} kleiner`), out, mk('+', 1, `${label} groesser`));
-  box.append(row);
-  return box;
-}
-
 function colorRow(current, onpick) {
   const row = el('div', 'row wrap swatches');
   for (const c of COLORS) {
@@ -283,12 +258,11 @@ let lastTab = { id: null, tab: 'allg' };
  */
 export function buildInspector(body, w, page, cbs) {
   body.replaceChildren();
-  // Die Fusszeile nennt Typ und Groesse und bleibt beim Tippen aktuell, ohne
-  // dass der ganze Inspektor neu gebaut wird (das kostete sonst den Fokus).
-  const note = el('p', 'note');
-  const syncNote = () => { note.textContent = `${TYPES[w.type].name} · ${w.cw}×${w.ch} Zellen`; };
-  const change = () => { syncNote(); cbs.onChange(); };
-  const rebuild = () => { buildInspector(body, w, page, cbs); cbs.onChange(); };
+  // Die Fusszeile nennt den Typ. Die Groesse steht in der Kopfzeile des
+  // Blattes — dort, wo man sie auch aendert.
+  const note = el('p', 'note', TYPES[w.type].name);
+  const change = () => cbs.onChange();
+  const rebuild = () => { buildInspector(body, w, page, cbs); cbs.onChange(); cbs.onHead?.(); };
 
   const isKnobBank = w.type === 'bank' && w.bankMode === 'knob';
   const isValue = ['fader', 'knob', 'meter', 'xy'].includes(w.type) || isKnobBank;
@@ -297,10 +271,15 @@ export function buildInspector(body, w, page, cbs) {
 
   /* ------------------------------------------------------- Allgemein --- */
   const tabAllg = (panel) => {
-    panel.append(field('Beschriftung', textInput(w.label, (v) => { w.label = v; change(); })));
-    if (w.type !== 'label') {
-      panel.append(field('OSC-Adresse', textInput(w.address, (v) => { w.address = v.trim(); change(); },
+    const name = field('Beschriftung', textInput(w.label, (v) => { w.label = v; change(); }));
+    if (w.type === 'label') {
+      panel.append(name);
+    } else {
+      // Nebeneinander: beides gehoert zusammen und passt in eine Zeile.
+      const g = el('div', 'grid-na');
+      g.append(name, field('OSC-Adresse', textInput(w.address, (v) => { w.address = v.trim(); change(); },
         { placeholder: '/surfaces/1/opacity' })));
+      panel.append(g);
     }
     if (w.type === 'xy') {
       panel.append(field('Adresse Y (leer = beide Werte an die Adresse oben)',
@@ -342,15 +321,21 @@ export function buildInspector(body, w, page, cbs) {
     if (w.type === 'color') {
       panel.append(field('Bedienung', selectInput(w.colorMode, [
         ['rgb', 'Regler R/G/B + Deckkraft'],
-        ['basic', 'Grundfarben + Deckkraft'],
-        ['picker', 'Farbwaehler + Deckkraft'],
+        ['hsv', 'Regler H/S/V + Deckkraft'],
+        ['palette', 'Palette + Deckkraft'],
       ], (v) => { w.colorMode = v; rebuild(); })));
+    }
+    if (w.type === 'label') {
+      panel.append(field('Ausrichtung', selectInput(w.align, [['left', 'links'], ['center', 'mittig'], ['right', 'rechts']],
+        (v) => { w.align = v; change(); })));
     }
     if (!panel.childElementCount) panel.append(el('p', 'note', 'Dieses Bauteil hat keine Werte.'));
   };
 
   /* -------------------------------------------------------- Eintraege --- */
   const tabItems = (panel) => {
+    panel.append(field('Spalten im Feld (0 = automatisch)',
+      numInput(w.cols, (v) => { w.cols = clamp(Math.round(v), 0, 12); rebuild(); }, { min: 0, max: 12, step: 1 })));
     panel.append(el('p', 'note', isKnobBank
       ? 'Jeder Eintrag ist ein Poti. Mit eigener Adresse sendet es dorthin, ohne Adresse an die Adresse des Bauteils.'
       : 'Mit eigener Adresse sendet der Eintrag „an"/„aus" dorthin. Ohne Adresse geht sein Wert an die Adresse des Bauteils.'));
@@ -387,34 +372,49 @@ export function buildInspector(body, w, page, cbs) {
     panel.append(add);
   };
 
-  /* ----------------------------------------------------------- Layout --- */
-  const tabLayout = (panel) => {
-    const m = minSize(w.type);
-    const g = el('div', 'grid2');
-    g.append(
-      stepper('Breite (Spalten)', w.cw, m.cw, page.columns, (v) => { w.cw = v; change(); }),
-      stepper('Hoehe (Zeilen)', w.ch, m.ch, MAX_ROWS, (v) => { w.ch = v; change(); }),
-    );
-    panel.append(g);
-    if (w.type === 'fader' || w.type === 'color') {
-      panel.append(field('Ausrichtung', selectInput(w.orient, [['v', 'senkrecht'], ['h', 'waagerecht']],
-        (v) => { w.orient = v; rebuild(); })));
-    }
-    if (w.type === 'label') {
-      panel.append(field('Ausrichtung', selectInput(w.align, [['left', 'links'], ['center', 'mittig'], ['right', 'rechts']],
-        (v) => { w.align = v; change(); })));
-    }
-    if (hasItems) {
-      panel.append(field('Spalten im Feld (0 = automatisch)',
-        numInput(w.cols, (v) => { w.cols = clamp(Math.round(v), 0, 12); rebuild(); }, { min: 0, max: 12, step: 1 })));
-    }
+  /* ---------------------------------------------------------- Palette --- */
+  const tabPalette = (panel) => {
+    panel.append(el('p', 'note', 'Diese Farben stehen im Bauteil zum Antippen bereit — in dieser Reihenfolge.'));
+    const list = el('div', 'palrows');
+    const colors = w.palette.length ? w.palette : defaultPalette();
+    colors.forEach((hex, i) => {
+      const row = el('div', 'palrow');
+      const pick = el('input');
+      pick.type = 'color';
+      pick.value = hex;
+      pick.setAttribute('aria-label', `Farbe ${i + 1}`);
+      pick.addEventListener('input', () => {
+        w.palette = [...colors];
+        w.palette[i] = pick.value;
+        change();
+      });
+      const del = el('button', 'iconbtn', '✕');
+      del.type = 'button';
+      del.setAttribute('aria-label', 'Farbe entfernen');
+      del.addEventListener('click', () => {
+        w.palette = colors.filter((_, k) => k !== i);
+        rebuild();
+      });
+      row.append(pick, del);
+      list.append(row);
+    });
+    panel.append(list);
+    const row = el('div', 'row wrap');
+    const add = el('button', 'btn', 'Farbe hinzufuegen');
+    add.type = 'button';
+    add.addEventListener('click', () => { w.palette = [...colors, '#ffffff']; rebuild(); });
+    const reset = el('button', 'btn ghost', 'Grundfarben');
+    reset.type = 'button';
+    reset.addEventListener('click', () => { w.palette = []; rebuild(); });
+    row.append(add, reset);
+    panel.append(row);
   };
 
   const tabs = [
     { id: 'allg', name: 'Allgemein', build: tabAllg },
     { id: 'wert', name: 'Werte', build: tabWert },
     ...(hasItems ? [{ id: 'items', name: 'Eintraege', build: tabItems }] : []),
-    { id: 'layout', name: 'Groesse', build: tabLayout },
+    ...(w.type === 'color' && w.colorMode === 'palette' ? [{ id: 'pal', name: 'Palette', build: tabPalette }] : []),
   ];
 
   if (lastTab.id !== w.id || !tabs.some((t) => t.id === lastTab.tab)) lastTab = { id: w.id, tab: 'allg' };
@@ -450,7 +450,6 @@ export function buildInspector(body, w, page, cbs) {
     mk('trash', 'Loeschen', 'danger', () => cbs.onDelete()),
   );
   body.append(actions);
-  syncNote();
   body.append(note);
 }
 

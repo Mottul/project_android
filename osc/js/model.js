@@ -51,8 +51,43 @@ export const BASE_COLORS = [
   ['Warmweiss', '#ffb46b'], ['Weiss', '#ffffff'], ['Kaltweiss', '#c8e4ff'],
 ];
 
-/** Bedienung des Farb-Bauteils. */
-export const COLOR_MODES = ['rgb', 'basic', 'picker'];
+/** Bedienung des Farb-Bauteils: Regler in RGB, Regler in HSV, oder Palette. */
+export const COLOR_MODES = ['rgb', 'hsv', 'palette'];
+
+/** Fruehere Namen derselben Sache — damit gespeicherte Seiten weiterlaufen. */
+const COLOR_MODE_ALIAS = { basic: 'palette', picker: 'hsv' };
+
+/** Standardpalette eines neuen Farb-Bauteils. */
+export const defaultPalette = () => BASE_COLORS.map(([, hex]) => hex);
+
+/* ------------------------------------------------------------ Farbraeume --- */
+
+/**
+ * HSV -> RGB. h in Grad (0..360), s/v in 0..1; heraus kommt 0..1 je Kanal.
+ * Getrennt gehalten, weil die Oberflaeche in HSV denkt, OSC aber in RGB.
+ */
+export function hsv2rgb(h, s, v) {
+  const hh = ((h % 360) + 360) % 360 / 60;
+  const c = clamp01(v) * clamp01(s);
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+  const m = clamp01(v) - c;
+  const t = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(hh) % 6];
+  return { r: t[0] + m, g: t[1] + m, b: t[2] + m };
+}
+
+/** RGB (0..1) -> HSV. h in Grad; bei Grau bleibt h bei 0. */
+export function rgb2hsv(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d > 1e-9) {
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
+  }
+  return { h: (h + 360) % 360, s: max <= 1e-9 ? 0 : d / max, v: max };
+}
 
 /** Verhalten einer Bank: Taster, Schalter oder Feld aus Potis. */
 export const BANK_MODES = ['momentary', 'toggle', 'knob'];
@@ -117,7 +152,8 @@ export function makeWidget(type = 'fader', over = {}) {
     endless: false,        // Poti: Endlos-Encoder
     align: 'left',         // Text: Ausrichtung
     source: 'number',      // Anzeige: 'number' | 'text'
-    colorMode: 'rgb',      // Farbe: 'rgb' (R/G/B/A) | 'basic' (Grundfarben) | 'picker'
+    colorMode: 'rgb',      // Farbe: 'rgb' | 'hsv' | 'palette'
+    palette: [],           // Farbe: eigene Palette (leer = Grundfarben)
     ...over,
   };
   if (t === 'toggle' || t === 'button') { w.cw = over.cw ?? size.cw; w.ch = over.ch ?? size.ch; }
@@ -157,7 +193,11 @@ export function normalizeWidget(raw) {
   w.endless = !!w.endless;
   w.align = ['left', 'center', 'right'].includes(w.align) ? w.align : 'left';
   w.source = w.source === 'text' ? 'text' : 'number';
-  w.colorMode = COLOR_MODES.includes(w.colorMode) ? w.colorMode : 'rgb';
+  const mode = COLOR_MODE_ALIAS[w.colorMode] || w.colorMode;
+  w.colorMode = COLOR_MODES.includes(mode) ? mode : 'rgb';
+  w.palette = Array.isArray(w.palette)
+    ? w.palette.slice(0, 48).map((c) => (/^#[0-9a-f]{6}$/i.test(String(c)) ? String(c).toLowerCase() : '#ffffff'))
+    : [];
   w.items = Array.isArray(w.items)
     ? w.items.slice(0, 64).map((it) => ({
         label: String(it?.label ?? ''),
@@ -303,22 +343,37 @@ export function usedRows(widgets) {
 }
 
 /**
- * Spaltenzahl aendern: relative Positionen bleiben erhalten, danach wird
- * neu gepackt, falls etwas kollidiert.
+ * Spaltenzahl der Seite aendern.
+ *
+ * Die Kacheln behalten dabei ihre Zellen: ein drei Spalten breiter Fader
+ * bleibt drei Spalten breit und wird mit dem Raster nur breiter oder schmaler.
+ * Eine fruehere Fassung hat die Groessen mitskaliert — das rundete bei jedem
+ * Schritt und verbog den Aufbau schon beim Hin- und Herschalten: aus 12 -> 11
+ * -> 12 wurden aus sechs Spalten sieben, und ueber mehrere Schritte aus einem
+ * schmalen Fader ein breiter.
+ *
+ * Von selbst waechst dabei nie eine Kachel. Beschnitten und verschoben wird
+ * nur, was im neuen Raster nicht mehr passt; danach rutscht alles wieder so
+ * weit nach oben, wie es kann. Beim VERKLEINERN behaelt eine Kachel, die ueber
+ * die ganze Breite ging — eine Ueberschrift, ein Tastenfeld —, die ganze
+ * Breite; sonst bliebe rechts ein Rest stehen.
+ *
+ * Wer das Raster vergroessert, bekommt rechts also Platz statt breiterer
+ * Kacheln. Das ist Absicht: so bleibt beim Hin- und Herschalten alles an
+ * seinem Platz, und zurueck kommt man mit ↶.
  */
-export function rescale(page, columns) {
-  const factor = columns / page.columns;
+export function recolumn(page, columns) {
+  const enger = columns < page.columns;
   for (const w of page.widgets) {
-    w.gx = clamp(Math.round(w.gx * factor), 0, columns - 1);
-    w.cw = clamp(Math.max(1, Math.round(w.cw * factor)), minSize(w.type).cw, columns);
-    if (w.gx + w.cw > columns) w.gx = columns - w.cw;
-    if (w.gx < 0) { w.gx = 0; w.cw = columns; }
+    const ganzeBreite = enger && w.cw >= page.columns;
+    w.cw = clamp(ganzeBreite ? columns : Math.min(w.cw, columns), minSize(w.type).cw, columns);
+    w.gx = ganzeBreite ? 0 : clamp(w.gx, 0, Math.max(0, columns - w.cw));
   }
   page.columns = columns;
-  // Kollisionen aufloesen: nach unten schieben, dann verdichten.
   const placed = [];
   for (const w of [...page.widgets].sort((a, b) => a.gy - b.gy || a.gx - b.gx)) {
-    while (!fits(w, placed, columns, w.id)) w.gy += 1;
+    let guard = 0;
+    while (!fits(w, placed, columns, w.id) && guard < MAX_ROWS * 4) { w.gy += 1; guard += 1; }
     placed.push(w);
   }
   compact(page.widgets, columns);
