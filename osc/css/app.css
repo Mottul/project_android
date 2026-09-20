@@ -312,8 +312,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 }
 .selrow { flex-wrap: nowrap; }
 .selrow .btn { min-height: 38px; padding: 0 12px; }
-.selrow .btn.sq { flex: 0 0 auto; width: 44px; padding: 0; display: grid; place-items: center; }
-.selrow .btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* Quadratische Symbolknoepfe (Rueckgaengig, Duplizieren, Loeschen) */
+.editbar .btn.sq { flex: 0 0 auto; width: 44px; padding: 0; display: grid; place-items: center; }
+.editbar .btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .editbar.has-sel .edithint { display: none; }
 .selname {
   flex: 1 1 auto; min-width: 0;
@@ -360,6 +361,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   font: inherit; font-weight: 600; font-size: .9rem;
 }
 .btn:active { filter: brightness(1.25); }
+.btn:disabled { opacity: .38; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #04202e; }
 .btn.ghost { background: transparent; }
 .btn.danger { color: #fca5a5; border-color: #7f1d1d; }
@@ -380,7 +382,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 input[type=checkbox] { width: 22px; height: 22px; min-height: 0; accent-color: var(--accent); }
 input[type=color] { padding: 2px; height: 42px; }
 .check { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: .9rem; }
-.sel { width: auto; min-width: 140px; }
+/* Auswahlfeld in einer Zeile neben Knoepfen. Der Name ist bewusst nicht
+   „sel": so heisst die ausgewaehlte Kachel — und `min-width` hat sie frueher
+   im Raster aufgeblaeht, sodass sie ihre Nachbarn ueberdeckte. */
+.selectbox { width: auto; min-width: 140px; }
 .note { margin: 6px 0 0; font-size: .8rem; color: var(--muted); }
 .muted { color: var(--muted); }
 .prose p { margin: 0 0 10px; font-size: .88rem; line-height: 1.5; }

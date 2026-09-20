@@ -7,7 +7,7 @@
  */
 
 import {
-  makeWidget, makePage, normalizeProject, autoArrange, dropAt, placeCopy,
+  makeWidget, makePage, normalizePage, normalizeProject, autoArrange, dropAt, placeCopy,
   usedRows, rescale, findSlot, clamp, TYPES, TYPE_ORDER, MIN_COLS, MAX_COLS,
 } from './model.js';
 import { PRESETS, buildPreset, starterProject } from './presets.js';
@@ -112,6 +112,7 @@ function renderTabs() {
     b.type = 'button';
     b.addEventListener('click', () => {
       project.currentPageId = p.id;
+      clearUndo();
       persist();
       renderTabs();
       renderSurface();
@@ -181,6 +182,77 @@ function renderSurface() {
   fitRows();
 }
 
+/* --------------------------------------------------------- Rueckgaengig --- */
+
+/**
+ * Rueckgaengig gilt dem AUFBAU im Bearbeiten-Modus: verschieben, Groesse,
+ * anlegen, loeschen, duplizieren, aufraeumen, Spalten, Einstellungen.
+ *
+ * Gemerkt wird jeweils die ganze Seite als Text — bei den paar Dutzend
+ * Bauteilen einer Seite ist das billiger als Buch ueber einzelne Aenderungen
+ * zu fuehren, und es kann nichts auseinanderlaufen.
+ *
+ * Der Stapel gilt nur fuer die laufende Sitzung im Bearbeiten-Modus: beim
+ * Verlassen, beim Seitenwechsel und bei einem neuen Projekt wird er geleert.
+ * Sonst koennte ein Schritt zurueck einen Stand wiederherstellen, der mit dem,
+ * was inzwischen live passiert ist, nichts mehr zu tun hat.
+ */
+const UNDO_MAX = 30;
+let undoStack = [];
+
+/** Live-Werte: die gehoeren dem Pult, nicht dem Aufbau — sie bleiben stehen. */
+const LIVE_KEYS = ['value', 'x', 'y', 'r', 'g', 'b', 'a', 'text'];
+
+const snapshotPage = () => JSON.stringify(currentPage());
+
+/** Einen Schritt merken. `snap` erlaubt einen frueher genommenen Stand. */
+function pushUndo(label, snap = snapshotPage()) {
+  undoStack.push({ pageId: currentPage().id, label, snap });
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  paintUndo();
+}
+
+function clearUndo() {
+  undoStack = [];
+  paintUndo();
+}
+
+function paintUndo() {
+  const b = $('#btnUndo');
+  if (!b) return;
+  const top = undoStack[undoStack.length - 1];
+  b.disabled = !top;
+  const text = top ? `Rueckgaengig: ${top.label}` : 'Rueckgaengig';
+  b.setAttribute('aria-label', text);
+  b.title = text;
+}
+
+/** Einen Schritt zurueck. */
+function undo() {
+  const step = undoStack.pop();
+  paintUndo();
+  if (!step) return;
+  const i = project.pages.findIndex((p) => p.id === step.pageId);
+  if (i < 0) return;
+
+  const live = new Map(project.pages[i].widgets.map((w) => [w.id, w]));
+  const page = normalizePage(JSON.parse(step.snap));
+  for (const w of page.widgets) {
+    const now = live.get(w.id);
+    if (!now) continue;   // war geloescht: der gemerkte Stand gilt
+    for (const k of LIVE_KEYS) w[k] = now[k];
+  }
+  project.pages[i] = page;
+  project.currentPageId = page.id;
+
+  persist();
+  renderTabs();
+  $('#colOut').textContent = page.columns;   // „Spalten" kann mit zurueckgehen
+  renderSurface();
+  setSelection(page.widgets.some((w) => w.id === selectedId) ? selectedId : null);
+  try { navigator.vibrate?.(12); } catch { /* egal */ }
+}
+
 /* -------------------------------------------------------------- Auswahl --- */
 
 /** Das ausgewaehlte Bauteil der aktuellen Seite (oder null). */
@@ -205,6 +277,7 @@ function setSelection(id) {
 
 function duplicateSelected(w) {
   const page = currentPage();
+  pushUndo('Duplizieren');
   const copy = duplicateWidget(w, page.widgets);
   page.widgets.push(copy);
   placeCopy(page.widgets, page.columns, copy, w);
@@ -216,6 +289,7 @@ function duplicateSelected(w) {
 
 function deleteWidget(w) {
   const page = currentPage();
+  pushUndo('Loeschen');
   page.widgets = page.widgets.filter((x) => x.id !== w.id);
   persist();
   renderSurface();
@@ -232,12 +306,14 @@ function setMode(next) {
   $('#colOut').textContent = currentPage().columns;
   renderSurface();
   setSelection(on ? selectedId : null);
-  if (!on) closeSheet();
+  if (!on) { clearUndo(); closeSheet(); }
+  else paintUndo();
 }
 
 /** Bauteil anlegen — an der gemerkten Stelle, sonst am ersten freien Platz. */
 function addWidget(type) {
   const page = currentPage();
+  pushUndo('Einfuegen');
   const w = makeWidget(type);
   w.cw = Math.min(w.cw, page.columns);
   page.widgets.push(w);
@@ -306,8 +382,15 @@ function openInspector(w) {
   const page = currentPage();
   const title = () => { $('#inspTitle').textContent = w.label || TYPES[w.type].name; };
   title();
+  // Ein Schritt je geoeffnetem Blatt: waehrend des Tippens einer Adresse
+  // waere jeder Buchstabe sonst ein eigener Schritt zurueck.
+  const before = snapshotPage();
+  let noted = false;
   buildInspector($('#inspBody'), w, page, {
-    onChange: () => { persist(); renderSurface(); setSelection(w.id); title(); },
+    onChange: () => {
+      if (!noted) { pushUndo('Einstellungen', before); noted = true; }
+      persist(); renderSurface(); setSelection(w.id); title();
+    },
     onDelete: () => { deleteWidget(w); closeSheet(); },
     onDuplicate: () => openInspector(duplicateSelected(w)),
   });
@@ -373,9 +456,11 @@ function widgetFromFeedback(entry) {
   const slot = findSlot(page.widgets, page.columns, w.cw, w.ch);
   w.gx = slot.gx;
   w.gy = slot.gy;
+  setMode('edit');          // leert den Stapel — deshalb erst danach merken
+  pushUndo('Einfuegen');
   page.widgets.push(w);
   persist();
-  setMode('edit');
+  renderSurface();
   setSelection(w.id);
   openInspector(w);
 }
@@ -395,6 +480,7 @@ function renderPageList() {
     name.addEventListener('focus', () => {
       if (p.id === project.currentPageId) return;
       project.currentPageId = p.id;
+      clearUndo();
       persist(); renderTabs(); renderSurface(); renderPageList(); setSelection(null);
     });
     row.append(name);
@@ -423,6 +509,7 @@ function renderPageList() {
       if (!confirm(`Seite „${p.name}" loeschen?`)) return;
       project.pages = project.pages.filter((x) => x.id !== p.id);
       if (project.currentPageId === p.id) project.currentPageId = project.pages[0].id;
+      clearUndo();
       persist(); renderPageList(); renderTabs(); renderSurface(); setSelection(null);
     }));
     list.append(row);
@@ -453,6 +540,7 @@ function renderLibrary() {
     open.textContent = 'Laden';
     open.addEventListener('click', () => {
       project = normalizeProject(p);
+      clearUndo();
       persist(); renderTabs(); renderSurface(); setSelection(null); renderLibrary();
       $('#inProject').value = project.name;
     });
@@ -482,6 +570,7 @@ function setColumns(cols) {
   const page = currentPage();
   const next = clamp(cols, MIN_COLS, MAX_COLS);
   if (next === page.columns) return;
+  pushUndo('Spalten');
   rescale(page, next);
   $('#colOut').textContent = next;
   persist();
@@ -504,6 +593,7 @@ function bind() {
   $('#colPlus').addEventListener('click', () => setColumns(currentPage().columns + 1));
   $('#btnArrange').addEventListener('click', () => {
     const page = currentPage();
+    pushUndo('Aufraeumen');
     autoArrange(page.widgets, page.columns);
     persist();
     renderSurface();
@@ -511,6 +601,17 @@ function bind() {
   });
 
   /* Auswahl-Leiste: gilt fuer das gerade gewaehlte Bauteil */
+  $('#btnUndo').append(uiIcon('undo'));
+  $('#btnUndo').addEventListener('click', undo);
+  // Am Rechner das gewohnte Kuerzel — am Handy reicht die Schaltflaeche.
+  window.addEventListener('keydown', (ev) => {
+    if (mode !== 'edit' || ev.key !== 'z' || !(ev.ctrlKey || ev.metaKey) || ev.shiftKey) return;
+    const t = ev.target;
+    if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    ev.preventDefault();
+    undo();
+  });
+
   $('#btnSelDup').append(uiIcon('copy'));
   $('#btnSelDel').append(uiIcon('trash'));
   $('#btnSelEdit').addEventListener('click', () => { const w = selected(); if (w) openInspector(w); });
@@ -521,6 +622,7 @@ function bind() {
     getPage: currentPage,
     isEditing: () => mode === 'edit',
     selectedId: () => selectedId,
+    onSnapshot: (label) => pushUndo(label),
     onChange: () => { persist(); renderSurface(); setSelection(selectedId); },
     onSelect: (id) => setSelection(id),
     onOpen: (w) => openInspector(w),
@@ -564,12 +666,14 @@ function bind() {
     project.pages.push(page);
     project.currentPageId = page.id;
     selectedId = null;
+    clearUndo();
     persist(); renderPageList(); renderTabs(); closeSheet(); setMode('edit');
   });
   $('#btnAddPreset').addEventListener('click', () => {
     const page = buildPreset($('#selPreset').value);
     project.pages.push(page);
     project.currentPageId = page.id;
+    clearUndo();
     persist(); renderPageList(); renderTabs(); renderSurface(); setSelection(null);
   });
   $('#fitChk').addEventListener('change', (ev) => {
@@ -593,12 +697,14 @@ function bind() {
     const i = project.pages.indexOf(page);
     fresh.id = page.id;
     project.pages[i] = fresh;
+    clearUndo();
     persist(); renderTabs(); renderSurface(); setSelection(null);
     closeSheet();
   });
   $('#btnResetAll').addEventListener('click', () => {
     if (!confirm('Alle Seiten auf die Werkseinstellung zuruecksetzen? Der aktuelle Aufbau geht verloren.')) return;
     project = starterProject();
+    clearUndo();
     persist(); renderTabs(); renderSurface(); setSelection(null);
     closeSheet();
   });
@@ -657,6 +763,7 @@ function importProject(ev) {
   reader.onload = () => {
     try {
       project = normalizeProject(JSON.parse(String(reader.result)));
+      clearUndo();
       persist();
       renderTabs(); renderSurface(); setSelection(null); renderLibrary();
       $('#inProject').value = project.name;

@@ -34,7 +34,8 @@ const el = (tag, cls, text) => {
  * Verschieben/Groesse aendern auf der Flaeche aktivieren (einmal aufrufen).
  * @param {HTMLElement} surface
  * @param {object} cbs { getPage(), isEditing(), selectedId(), onChange(),
- *                       onSelect(id), onOpen(widget), onEmptyHold(cell) }
+ *                       onSelect(id), onOpen(widget), onEmptyHold(cell),
+ *                       onSnapshot(label) — vor einer Aenderung, fuers Zurueck }
  */
 export function attachEditing(surface, cbs) {
   let st = null;
@@ -153,7 +154,7 @@ export function attachEditing(surface, cbs) {
       if (!moved && !held && Date.now() - t0 < TAP_MS) cbs.onSelect?.(null);
       return;
     }
-    const { w, tile, moved, last, wasSelected } = st;
+    const { w, tile, moved, last, wasSelected, resize } = st;
     try { tile.releasePointerCapture(st.id); } catch { /* egal */ }
     tile.classList.remove('moving');
     hideGhost();
@@ -161,6 +162,7 @@ export function attachEditing(surface, cbs) {
     st = null;
     if (moved) {
       const page = cbs.getPage();
+      cbs.onSnapshot?.(resize ? 'Groesse' : 'Verschieben');
       dropAt(page.widgets, page.columns, w, last);
       cbs.onChange();
     } else if (quick && wasSelected) {
