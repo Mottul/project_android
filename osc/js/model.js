@@ -40,6 +40,20 @@ export const TYPES = {
   meter:  { name: 'Anzeige',  hint: 'zeigt eingehendes Feedback',       cw: 6, ch: 3, min: { cw: 2, ch: 1 } },
 };
 
+/**
+ * Grundfarben des Farb-Bauteils — die Mischungen, die am Pult zaehlen:
+ * Primaer- und Sekundaerfarben, dazu Weiss und zwei Weisstoene.
+ */
+export const BASE_COLORS = [
+  ['Rot', '#ff0000'], ['Orange', '#ff7a00'], ['Gelb', '#ffe000'], ['Limette', '#9dff00'],
+  ['Gruen', '#00ff00'], ['Tuerkis', '#00ffa0'], ['Cyan', '#00ffff'], ['Azur', '#0080ff'],
+  ['Blau', '#0000ff'], ['Violett', '#8000ff'], ['Magenta', '#ff00ff'], ['Pink', '#ff0080'],
+  ['Warmweiss', '#ffb46b'], ['Weiss', '#ffffff'], ['Kaltweiss', '#c8e4ff'],
+];
+
+/** Bedienung des Farb-Bauteils. */
+export const COLOR_MODES = ['rgb', 'basic', 'picker'];
+
 /** Verhalten einer Bank: Taster, Schalter oder Feld aus Potis. */
 export const BANK_MODES = ['momentary', 'toggle', 'knob'];
 
@@ -103,6 +117,7 @@ export function makeWidget(type = 'fader', over = {}) {
     endless: false,        // Poti: Endlos-Encoder
     align: 'left',         // Text: Ausrichtung
     source: 'number',      // Anzeige: 'number' | 'text'
+    colorMode: 'rgb',      // Farbe: 'rgb' (R/G/B/A) | 'basic' (Grundfarben) | 'picker'
     ...over,
   };
   if (t === 'toggle' || t === 'button') { w.cw = over.cw ?? size.cw; w.ch = over.ch ?? size.ch; }
@@ -142,6 +157,7 @@ export function normalizeWidget(raw) {
   w.endless = !!w.endless;
   w.align = ['left', 'center', 'right'].includes(w.align) ? w.align : 'left';
   w.source = w.source === 'text' ? 'text' : 'number';
+  w.colorMode = COLOR_MODES.includes(w.colorMode) ? w.colorMode : 'rgb';
   w.items = Array.isArray(w.items)
     ? w.items.slice(0, 64).map((it) => ({
         label: String(it?.label ?? ''),

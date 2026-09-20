@@ -10,7 +10,12 @@ installierbar, ohne Konto und ohne Cloud.
 
 * **Zehn Bauteile** — Fader, Poti (auch Endlos-Encoder), Schalter, Taster, Bank,
   Auswahl, XY-Pad, Farbe, Anzeige und Text. Die **Bank** ist ein Feld aus
-  Tastern, Schaltern **oder Potis** — je Eintrag eine eigene Adresse.
+  Tastern, Schaltern **oder Potis** — je Eintrag eine eigene Adresse, der Wert
+  steht im Zifferblatt.
+* **Ablesbar im Halbdunkel.** Beim Fader steht der Wert in der Bahn und bleibt
+  lesbar, wenn der Balken darueberlaeuft; oben hat dadurch der Name Platz (bis
+  zu zwei Zeilen). **Farbe** gibt es als R/G/B-Regler, als Feld aus Grundfarben
+  oder mit dem Farbwaehler des Geraets — jeweils mit Deckkraft.
 * **Freies Raster.** Kacheln verschieben und an der Ecke unten rechts aufziehen,
   4 bis 24 Spalten, „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen
   (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest).
