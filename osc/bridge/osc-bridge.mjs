@@ -23,6 +23,7 @@
  *   node osc-bridge.mjs --listen 9000        Feedback-Port
  *   node osc-bridge.mjs --nova 10.0.0.9      NovaStar-Prozessor
  *   node osc-bridge.mjs --dir /pfad/zur/app  App-Ordner von Hand setzen
+ *   node osc-bridge.mjs --no-qr              ohne QR-Code starten
  */
 
 import http from 'node:http';
@@ -35,13 +36,13 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const NAME = 'OSC-Bruecke';
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 /* ------------------------------------------------------------ Argumente -- */
 
 function parseArgs(argv) {
-  const out = { port: 8090, dir: null, target: null, listen: null, nova: null };
+  const out = { port: 8090, dir: null, target: null, listen: null, nova: null, qr: null };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -50,12 +51,16 @@ function parseArgs(argv) {
     else if (a === '--target' || a === '-t') out.target = next();
     else if (a === '--listen' || a === '-l') out.listen = Number(next());
     else if (a === '--nova' || a === '-n') out.nova = next();
+    else if (a === '--qr') out.qr = true;
+    else if (a === '--no-qr') out.qr = false;
     else if (a === '--help' || a === '-h') out.help = true;
   }
   return out;
 }
 
 const args = parseArgs(process.argv.slice(2));
+/* Der QR-Code kommt ins Terminal, nicht in eine Protokolldatei. */
+const zeigeQr = args.qr === null ? !!process.stdout.isTTY : args.qr;
 const SELF = fileURLToPath(import.meta.url);
 /** Direkt gestartet (node osc-bridge.mjs) oder nur importiert (Tests)? */
 const isMain = process.argv[1] ? path.resolve(process.argv[1]) === SELF : false;
@@ -90,6 +95,7 @@ function readOsc(buf) {
         else if (t === 'f') { args2.push(buf.readFloatBE(p)); p += 4; }
         else if (t === 'd') { args2.push(buf.readDoubleBE(p)); p += 8; }
         else if (t === 's' || t === 'S') { const r = readStr(p); args2.push(r.text); p = r.next; }
+        else if (t === 'r') { args2.push(`#${buf.readUInt32BE(p).toString(16).padStart(8, '0')}`); p += 4; }
         else if (t === 'T') args2.push(1);
         else if (t === 'F') args2.push(0);
         else break;
@@ -293,7 +299,11 @@ function makeClient(socket) {
   clients.add(client);
   client.sendJson({ t: 'hello', name: NAME, version: VERSION });
   client.sendJson({ t: 'status', targetOk: true, target: state.target, listen: state.listenPort });
-  log(`Handy verbunden (${clients.size} aktiv)`);
+  // Die Adresse, unter der das Handy hereingekommen ist, beantwortet die
+  // Frage „welche IP ist die richtige?" endgueltig.
+  const ueber = String(socket.localAddress || '').replace(/^::ffff:/, '');
+  const echt = ueber && !ueber.startsWith('127.') && ueber !== '::1';
+  log(`Handy verbunden (${clients.size} aktiv)${echt ? ` ueber http://${ueber}:${args.port} — diese Adresse ist die richtige` : ''}`);
   return client;
 }
 
@@ -423,22 +433,292 @@ server.on('upgrade', (req, socket, head) => {
   if (head && head.length) socket.emit('data', head);
 });
 
-/* ----------------------------------------------------------------- Start */
+/* ----------------------------------------------------------------- QR --- */
+/**
+ * Kleiner QR-Erzeuger fuer die Adresse im Terminal.
+ *
+ * Nur was hier gebraucht wird: Byte-Modus, Fehlerkorrektur M, Versionen 1 bis
+ * 6 (bis 106 Zeichen). Damit bleibt die Bruecke eine einzige Datei, die man
+ * kopieren und starten kann — ohne npm, ohne Abhaengigkeiten.
+ */
 
-function addresses() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces())) {
-    for (const ni of list || []) {
-      if (ni.family === 'IPv4' && !ni.internal) out.push(ni.address);
+// Je Version: [EC-Woerter je Block, Bloecke, Datenwoerter je Block] bei Stufe M.
+const QR_EC = { 1: [10, 1, 16], 2: [16, 1, 28], 3: [26, 1, 44], 4: [18, 2, 32], 5: [24, 2, 43], 6: [16, 4, 27] };
+// Mitte des Ausrichtungsmusters (ab Version 2 gibt es genau eines).
+const QR_ALIGN = { 2: 18, 3: 22, 4: 26, 5: 30, 6: 34 };
+
+// Rechnen im Galoisfeld GF(256) mit dem QR-Polynom 0x11d.
+const GF_EXP = new Uint8Array(512);
+const GF_LOG = new Uint8Array(256);
+{
+  let x = 1;
+  for (let i = 0; i < 255; i += 1) { GF_EXP[i] = x; GF_LOG[x] = i; x = (x << 1) ^ (x & 0x80 ? 0x11d : 0); }
+  for (let i = 255; i < 512; i += 1) GF_EXP[i] = GF_EXP[i - 255];
+}
+const gfMul = (a, b) => (a && b ? GF_EXP[GF_LOG[a] + GF_LOG[b]] : 0);
+
+/** Generatorpolynom fuer `n` Fehlerkorrekturwoerter. */
+function rsPoly(n) {
+  let p = [1];
+  for (let i = 0; i < n; i += 1) {
+    const q = new Array(p.length + 1).fill(0);
+    for (let j = 0; j < p.length; j += 1) { q[j] ^= p[j]; q[j + 1] ^= gfMul(p[j], GF_EXP[i]); }
+    p = q;
+  }
+  return p;
+}
+
+/** Fehlerkorrekturwoerter zu einem Datenblock. */
+function rsEncode(data, ecLen) {
+  const gen = rsPoly(ecLen);
+  const buf = new Uint8Array(data.length + ecLen);
+  buf.set(data);
+  for (let i = 0; i < data.length; i += 1) {
+    const f = buf[i];
+    if (!f) continue;
+    for (let j = 0; j < gen.length; j += 1) buf[i + j] ^= gfMul(gen[j], f);
+  }
+  return buf.slice(data.length);
+}
+
+const QR_MASKS = [
+  (r, c) => (r + c) % 2 === 0,
+  (r) => r % 2 === 0,
+  (r, c) => c % 3 === 0,
+  (r, c) => (r + c) % 3 === 0,
+  (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+  (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+  (r, c) => ((((r * c) % 2) + ((r * c) % 3)) % 2) === 0,
+  (r, c) => ((((r + c) % 2) + ((r * c) % 3)) % 2) === 0,
+];
+
+/** Formatinfo (Stufe M + Maske) mit BCH-Sicherung. */
+function qrFormat(mask) {
+  const data = (0 << 3) | mask;          // 0b00 = Fehlerkorrektur M
+  let rem = data;
+  for (let i = 0; i < 10; i += 1) rem = (rem << 1) ^ ((rem >> 9) * 0x537);
+  return ((data << 10) | rem) ^ 0x5412;
+}
+
+/** Strafpunkte einer Maskierung — je weniger, desto besser lesbar. */
+function qrPenalty(m) {
+  const size = m.length;
+  let score = 0;
+  const lauf = (get) => {
+    for (let a = 0; a < size; a += 1) {
+      let last = -1; let len = 0;
+      const reihe = [];
+      for (let b = 0; b < size; b += 1) {
+        const v = get(a, b);
+        reihe.push(v);
+        if (v === last) { len += 1; if (len === 5) score += 3; else if (len > 5) score += 1; }
+        else { last = v; len = 1; }
+      }
+      // Muster 1:1:3:1:1 mit vier hellen Modulen daneben
+      const s = reihe.join('');
+      for (const pat of ['1011101 0000', '0000 1011101']) {
+        const p = pat.replace(' ', '');
+        let i = s.indexOf(p);
+        while (i >= 0) { score += 40; i = s.indexOf(p, i + 1); }
+      }
+    }
+  };
+  lauf((r, c) => m[r][c]);
+  lauf((c, r) => m[r][c]);
+  for (let r = 0; r < size - 1; r += 1) {
+    for (let c = 0; c < size - 1; c += 1) {
+      const v = m[r][c];
+      if (v === m[r][c + 1] && v === m[r + 1][c] && v === m[r + 1][c + 1]) score += 3;
     }
   }
-  return out;
+  let dunkel = 0;
+  for (const row of m) for (const v of row) dunkel += v;
+  const anteil = (dunkel * 100) / (size * size);
+  score += Math.floor(Math.abs(anteil - 50) / 5) * 10;
+  return score;
+}
+
+/**
+ * QR-Matrix fuer einen Text; `null`, wenn er zu lang ist.
+ * @returns {number[][]|null} 1 = dunkel, 0 = hell
+ */
+function qrMatrix(text) {
+  const bytes = Buffer.from(String(text), 'utf8');
+  let version = 0;
+  for (let v = 1; v <= 6; v += 1) {
+    const [, blocks, perBlock] = QR_EC[v];
+    if (bytes.length + 2 <= blocks * perBlock) { version = v; break; }
+  }
+  if (!version) return null;
+  const [ecLen, blocks, perBlock] = QR_EC[version];
+
+  /* Bitstrom: Modus, Laenge, Daten, Abschluss, Fuellbytes */
+  const bits = [];
+  const push = (val, n) => { for (let i = n - 1; i >= 0; i -= 1) bits.push((val >> i) & 1); };
+  push(0b0100, 4);
+  push(bytes.length, 8);
+  for (const b of bytes) push(b, 8);
+  const kapazitaet = blocks * perBlock * 8;
+  for (let i = 0; i < 4 && bits.length < kapazitaet; i += 1) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  for (let i = 0; bits.length < kapazitaet; i += 1) push(i % 2 ? 0x11 : 0xec, 8);
+
+  const woerter = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j += 1) byte = (byte << 1) | bits[i + j];
+    woerter.push(byte);
+  }
+
+  /* Bloecke bilden, Fehlerkorrektur anhaengen, verschraenken */
+  const dat = []; const ecc = [];
+  for (let b = 0; b < blocks; b += 1) {
+    const chunk = Uint8Array.from(woerter.slice(b * perBlock, (b + 1) * perBlock));
+    dat.push(chunk);
+    ecc.push(rsEncode(chunk, ecLen));
+  }
+  const strom = [];
+  for (let i = 0; i < perBlock; i += 1) for (const b of dat) strom.push(b[i]);
+  for (let i = 0; i < ecLen; i += 1) for (const b of ecc) strom.push(b[i]);
+
+  /* Feste Muster setzen */
+  const size = 17 + 4 * version;
+  const m = Array.from({ length: size }, () => new Int8Array(size).fill(0));
+  const fest = Array.from({ length: size }, () => new Uint8Array(size));
+  const setz = (r, c, v) => { m[r][c] = v; fest[r][c] = 1; };
+
+  const sucher = (r0, c0) => {
+    for (let i = -1; i <= 7; i += 1) {
+      for (let j = -1; j <= 7; j += 1) {
+        const r = r0 + i; const c = c0 + j;
+        if (r < 0 || c < 0 || r >= size || c >= size) continue;
+        const innen = i >= 0 && i <= 6 && j >= 0 && j <= 6;
+        const dunkel = innen && (i === 0 || i === 6 || j === 0 || j === 6 || (i >= 2 && i <= 4 && j >= 2 && j <= 4));
+        setz(r, c, dunkel ? 1 : 0);
+      }
+    }
+  };
+  sucher(0, 0); sucher(0, size - 7); sucher(size - 7, 0);
+  for (let i = 8; i < size - 8; i += 1) { setz(6, i, i % 2 === 0 ? 1 : 0); setz(i, 6, i % 2 === 0 ? 1 : 0); }
+  if (version >= 2) {
+    const a = QR_ALIGN[version];
+    for (let i = -2; i <= 2; i += 1) {
+      for (let j = -2; j <= 2; j += 1) {
+        setz(a + i, a + j, Math.abs(i) === 2 || Math.abs(j) === 2 || (i === 0 && j === 0) ? 1 : 0);
+      }
+    }
+  }
+  // Platz der Formatinfo freihalten
+  for (let i = 0; i <= 8; i += 1) { if (!fest[8][i]) setz(8, i, 0); if (!fest[i][8]) setz(i, 8, 0); }
+  for (let i = size - 8; i < size; i += 1) { if (!fest[8][i]) setz(8, i, 0); if (!fest[i][8]) setz(i, 8, 0); }
+
+  /* Daten im Zickzack von rechts unten einsetzen */
+  let idx = 0; let bit = 7; let dir = -1; let row = size - 1;
+  for (let col = size - 1; col > 0; col -= 2) {
+    if (col === 6) col -= 1;
+    for (;;) {
+      for (const c of [col, col - 1]) {
+        if (fest[row][c]) continue;
+        m[row][c] = idx < strom.length ? (strom[idx] >> bit) & 1 : 0;
+        bit -= 1;
+        if (bit < 0) { bit = 7; idx += 1; }
+      }
+      row += dir;
+      if (row < 0 || row >= size) { row -= dir; dir = -dir; break; }
+    }
+  }
+
+  /* Beste Maske waehlen */
+  let beste = null; let bestesScore = Infinity; let besteMaske = 0;
+  for (let k = 0; k < 8; k += 1) {
+    const probe = m.map((r) => Int8Array.from(r));
+    for (let r = 0; r < size; r += 1) {
+      for (let c = 0; c < size; c += 1) if (!fest[r][c] && QR_MASKS[k](r, c)) probe[r][c] ^= 1;
+    }
+    const fmt = qrFormat(k);
+    schreibFormat(probe, size, fmt);
+    const score = qrPenalty(probe);
+    if (score < bestesScore) { bestesScore = score; beste = probe; besteMaske = k; }
+  }
+  void besteMaske;
+  return beste.map((r) => Array.from(r));
+}
+
+/** Formatinfo an ihre beiden Plaetze schreiben. */
+function schreibFormat(m, size, fmt) {
+  const bit = (i) => (fmt >> i) & 1;
+  for (let i = 0; i <= 5; i += 1) m[i][8] = bit(i);
+  m[7][8] = bit(6);
+  m[8][8] = bit(7);
+  m[8][7] = bit(8);
+  for (let i = 9; i < 15; i += 1) m[8][14 - i] = bit(i);
+  for (let i = 0; i < 8; i += 1) m[8][size - 1 - i] = bit(i);
+  for (let i = 8; i < 15; i += 1) m[size - 15 + i][8] = bit(i);
+  m[size - 8][8] = 1;
+}
+
+/**
+ * QR-Code als Terminalzeilen. Zwei Modulzeilen teilen sich eine Textzeile
+ * (Halbblock), damit der Code quadratisch aussieht und aufs Bild passt.
+ */
+function qrLines(text) {
+  const m = qrMatrix(text);
+  if (!m) return [];
+  const size = m.length;
+  const rand = 4;
+  const dunkel = (r, c) => (r < 0 || c < 0 || r >= size || c >= size ? 0 : m[r][c]);
+  const zeilen = [];
+  for (let r = -rand; r < size + rand; r += 2) {
+    let zeile = '';
+    for (let c = -rand; c < size + rand; c += 1) {
+      zeile += `\x1b[${dunkel(r, c) ? 30 : 37}m\x1b[${dunkel(r + 1, c) ? 40 : 47}m▀`;
+    }
+    zeilen.push(`  ${zeile}\x1b[0m`);
+  }
+  return zeilen;
+}
+
+/* ----------------------------------------------------------------- Start */
+
+/* Namen, hinter denen meist kein echtes Netz steckt (Docker, VM, VPN ...). */
+const VIRTUELL = /(virtual|vbox|vmware|hyper-?v|docker|^br-|^veth|^tun|^tap|^utun|zerotier|tailscale|wsl|loopback|bluetooth|vpn|parallels|teredo)/i;
+/* Namen echter Netzkarten unter Linux, macOS und Windows. */
+const ECHT = /^(wlan|wlp|wlx|wl\d|wifi|wi-?fi|drahtlos|en\d|eth|eno|enp|ens|ethernet|lan)/i;
+
+/**
+ * Wie wahrscheinlich ist es, dass das Handy die Bruecke unter dieser Adresse
+ * erreicht? Kleiner ist besser. Zaehlt nur fuer die Reihenfolge der Ausgabe —
+ * sicher weiss es erst die Bruecke, wenn sich ein Handy meldet.
+ */
+function rangDerAdresse(name, ip) {
+  let r = 5;
+  if (ECHT.test(name)) r = 1;
+  if (VIRTUELL.test(name)) r = 9;
+  if (/^192\.168\./.test(ip)) r -= 1;                       // typisches Heimnetz
+  if (/^169\.254\./.test(ip)) r += 5;                       // ohne DHCP selbst vergeben
+  if (/^172\.(1[7-9]|2\d|3[01])\./.test(ip)) r += 3;        // Docker-Bereich
+  return r;
+}
+
+/** IPv4-Adressen dieses Rechners, die wahrscheinlichste zuerst. */
+function addresses() {
+  const out = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    for (const ni of list || []) {
+      if (ni.family !== 'IPv4' || ni.internal) continue;
+      out.push({ name, address: ni.address, rang: rangDerAdresse(name, ni.address) });
+    }
+  }
+  return out.sort((a, b) => a.rang - b.rang || a.address.localeCompare(b.address));
 }
 
 function start() {
 if (state.listenPort) bindFeedback(state.listenPort);
 
 server.listen(args.port, () => {
+  const netze = addresses();
+  const spalte = (text, wert) => `    ${text}`.padEnd(36) + wert;
+  const url = netze.length ? `http://${netze[0].address}:${args.port}` : `http://localhost:${args.port}`;
   const lines = [
     '',
     `  ${NAME} ${VERSION}`,
@@ -449,12 +729,23 @@ server.listen(args.port, () => {
     `  App-Ordner    ${appDir || '— (nur Bruecke)'}`,
     '',
     '  Am Handy oeffnen:',
-    ...(addresses().length ? addresses().map((ip) => `    http://${ip}:${args.port}`) : ['    (keine Netzwerkadresse gefunden)']),
-    `    http://localhost:${args.port}   (auf diesem Rechner)`,
-    '',
-    '  Beenden mit Strg+C',
+    ...(netze.length
+      ? netze.map((n, i) => spalte(`http://${n.address}:${args.port}`, `${n.name}${i === 0 ? '  ← vermutlich diese' : ''}`))
+      : ['    (keine Netzwerkadresse gefunden)']),
+    spalte(`http://localhost:${args.port}`, 'nur auf diesem Rechner'),
     '',
   ];
+  if (netze.length > 1) {
+    lines.push(
+      '  Mehrere Adressen? Es muss die des Netzes sein, in dem auch das Handy',
+      '  haengt — meist das WLAN. Sobald sich eines meldet, steht hier, ueber',
+      '  welche Adresse es hereingekommen ist.',
+      '',
+    );
+  }
+  const qr = zeigeQr ? qrLines(url) : [];
+  if (qr.length) lines.push('  Oder scannen:', '', ...qr, '', `    ${url}`, '');
+  lines.push('  Beenden mit Strg+C', '');
   console.log(lines.join('\n'));
 });
 
@@ -477,4 +768,4 @@ if (isMain) {
 }
 
 // Fuer die Tests: die reinen Bausteine sind auch einzeln nutzbar.
-export { parseArgs, splitHostPort, readOsc, oscString, novaFrame, novaBrightness, novaDisplay, novaPreset, DISPLAY, acceptKey, start };
+export { parseArgs, splitHostPort, readOsc, oscString, novaFrame, novaBrightness, novaDisplay, novaPreset, DISPLAY, acceptKey, qrMatrix, qrLines, addresses, start };

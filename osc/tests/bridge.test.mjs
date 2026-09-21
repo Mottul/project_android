@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   parseArgs, splitHostPort, readOsc, oscString,
-  novaBrightness, novaDisplay, novaPreset, DISPLAY, acceptKey,
+  novaBrightness, novaDisplay, novaPreset, DISPLAY, acceptKey, qrMatrix, qrLines,
 } from '../bridge/osc-bridge.mjs';
 import { encodeMessage, decodePacket } from '../js/osc.js';
 
@@ -182,4 +182,57 @@ test('Komplettlauf: WebSocket -> UDP, UDP -> WebSocket, /nova/ bleibt liegen', a
   assert.equal(leaked, false, '/nova/ wurde faelschlich als UDP weitergereicht');
 
   ws.close();
+});
+
+/* --------------------------------------------------------------- QR-Code --- */
+
+/* Die Matrizen wurden einmal gegen die Bibliothek „qrcode" geprueft und mit
+   dem Leser „jsqr" zurueckgelesen. Hier stehen die Merkmale, die beim
+   Weiterentwickeln sofort auffallen muessen. */
+
+const fingerabdruck = (m) => m.map((r) => r.join('')).join('\n')
+  .split('').reduce((h, ch) => ((h * 31 + ch.charCodeAt(0)) >>> 0), 7);
+
+test('QR: Groesse waechst mit der Textlaenge', () => {
+  assert.equal(qrMatrix('A').length, 21, 'Version 1');
+  assert.equal(qrMatrix('http://192.168.1.20:8090').length, 25, 'Version 2');
+  assert.equal(qrMatrix('x'.repeat(106)).length, 41, 'Version 6');
+  assert.equal(qrMatrix('x'.repeat(107)), null, 'darueber sagt der Erzeuger ab');
+});
+
+test('QR: Sucher-, Takt- und Ausrichtungsmuster sitzen richtig', () => {
+  const m = qrMatrix('http://192.168.1.20:8090');
+  const n = m.length;
+  for (const [r0, c0] of [[0, 0], [0, n - 7], [n - 7, 0]]) {
+    for (let i = 0; i < 7; i += 1) {
+      for (let j = 0; j < 7; j += 1) {
+        const rand = i === 0 || i === 6 || j === 0 || j === 6;
+        const kern = i >= 2 && i <= 4 && j >= 2 && j <= 4;
+        assert.equal(m[r0 + i][c0 + j], rand || kern ? 1 : 0, `Sucher bei ${r0},${c0} Feld ${i},${j}`);
+      }
+    }
+  }
+  for (let i = 8; i < n - 8; i += 1) {
+    assert.equal(m[6][i], i % 2 === 0 ? 1 : 0, 'Taktmuster waagerecht');
+    assert.equal(m[i][6], i % 2 === 0 ? 1 : 0, 'Taktmuster senkrecht');
+  }
+  assert.equal(m[18][18], 1, 'Mitte des Ausrichtungsmusters');
+  assert.equal(m[17][18], 0, 'Ring darum hell');
+  assert.equal(m[n - 8][8], 1, 'das immer dunkle Modul');
+});
+
+test('QR: derselbe Text ergibt dasselbe Muster', () => {
+  const a = qrMatrix('http://192.168.1.20:8090');
+  const b = qrMatrix('http://192.168.1.20:8090');
+  assert.equal(fingerabdruck(a), fingerabdruck(b));
+  assert.notEqual(fingerabdruck(a), fingerabdruck(qrMatrix('http://192.168.1.21:8090')));
+});
+
+test('QR: Halbbloecke ergeben ein quadratisches Bild mit Ruhezone', () => {
+  const zeilen = qrLines('http://192.168.1.20:8090');
+  const module = 25 + 8;                        // Version 2 plus vier Module Rand
+  assert.equal(zeilen.length, Math.ceil(module / 2));
+  const bloecke = [...zeilen[0]].filter((ch) => ch === '\u2580').length;
+  assert.equal(bloecke, module, 'je Modul ein Halbblock');
+  assert.equal(qrLines('x'.repeat(200)).length, 0, 'zu lang: lieber gar kein Bild');
 });

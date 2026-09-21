@@ -12,6 +12,7 @@
  */
 
 import { clamp, clamp01, defaultPalette, hsv2rgb, rgb2hsv } from './model.js';
+import { packRgba, unpackRgba } from './osc.js';
 
 const HOLD = 40;    // px seitlich -> feiner Griff
 const HOLD2 = 120;  // px seitlich -> sehr feiner Griff
@@ -545,8 +546,18 @@ export function createWidget(w, ctx) {
     const bars = {};
     const hex2 = (v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, '0');
     const rgbHex = () => `#${hex2(w.r)}${hex2(w.g)}${hex2(w.b)}`;
-    const rgba = () => [{ type: 'f', value: w.r }, { type: 'f', value: w.g },
-                        { type: 'f', value: w.b }, { type: 'f', value: w.a }];
+    /**
+     * Die Farbe als OSC-Argumente. Welche Form das Zielprogramm versteht,
+     * steht im Bauteil: ein 32-Bit-Wert (MadMapper), vier Kommazahlen oder
+     * vier Ganzzahlen.
+     */
+    const rgba = () => {
+      if (w.colorArg === 'rgba32') return [{ type: 'r', value: packRgba(w.r, w.g, w.b, w.a) }];
+      if (w.colorArg === 'int') {
+        return [w.r, w.g, w.b, w.a].map((v) => ({ type: 'i', value: Math.round(clamp01(v) * 255) }));
+      }
+      return [w.r, w.g, w.b, w.a].map((v) => ({ type: 'f', value: v }));
+    };
     const emit = (now) => send(w.address, rgba(), now);
 
     // Farbton und Saettigung muessen gemerkt werden: bei Schwarz oder Grau
@@ -645,13 +656,22 @@ export function createWidget(w, ctx) {
       for (const b of chips) b.classList.toggle('on', b.dataset.hex === hex);
       val.textContent = hex;
     };
-    api.feedback = (args) => {
+    api.feedback = (args, types) => {
       if (touching) return;
-      const [r, g, b, a] = args;
-      if (typeof r === 'number') w.r = clamp01(r);
-      if (typeof g === 'number') w.g = clamp01(g);
-      if (typeof b === 'number') w.b = clamp01(b);
-      if (typeof a === 'number') w.a = clamp01(a);
+      // Eine 32-Bit-Farbe kommt als „#rrggbbaa" zurueck, sonst vier Zahlen —
+      // je nach Gegenstelle als 0..1 oder als 0..255.
+      const packed = typeof args[0] === 'string' ? unpackRgba(args[0]) : null;
+      if (packed) {
+        w.r = packed.r; w.g = packed.g; w.b = packed.b; w.a = packed.a;
+      } else {
+        const ganz = String(types || '').includes('i');
+        const zahl = (v) => clamp01(ganz || v > 1.0001 ? v / 255 : v);
+        const [r, g, b, a] = args;
+        if (typeof r === 'number') w.r = zahl(r);
+        if (typeof g === 'number') w.g = zahl(g);
+        if (typeof b === 'number') w.b = zahl(b);
+        if (typeof a === 'number') w.a = zahl(a);
+      }
       hsv = rgb2hsv(w.r, w.g, w.b);
       api.paint();
     };
