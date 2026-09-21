@@ -191,8 +191,17 @@
 <section class="sheet" id="sheetSettings" hidden aria-label="Einstellungen">
   <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Einstellungen</h2></div>
   <div class="sheet-body">
-    <label class="check"><input type="checkbox" id="chkAuto"> Beim Start automatisch verbinden</label>
+    <label class="check" id="rowFull"><input type="checkbox" id="chkFull"> Vollbild</label>
+    <p class="note" id="noteFull" hidden>Vollbild kann dieser Browser nicht. Auf dem iPhone
+      geht es ueber <i>Teilen → Zum Home-Bildschirm</i> — so gestartet laeuft die App
+      ohne Browserleisten.</p>
+
     <label class="check"><input type="checkbox" id="chkWake"> Bildschirm wach halten</label>
+    <p class="note" id="noteWake" hidden>Dafuer verlangt der Browser eine gesicherte
+      Verbindung. Ueber <code>http://…</code> im lokalen Netz erlaubt er es nicht — dann
+      hilft nur, die Bildschirmsperre des Handys hochzusetzen.</p>
+
+    <label class="check"><input type="checkbox" id="chkAuto"> Beim Start automatisch verbinden</label>
     <label class="check"><input type="checkbox" id="chkHaptic"> Vibrieren beim Tasten</label>
     <label class="check"><input type="checkbox" id="chkLock"> Bedienung sperren</label>
     <p class="note">„Bedienung sperren" macht die Oberflaeche unempfindlich —
@@ -232,6 +241,11 @@
       MadMapper den Regler auswaehlen, Lernen einschalten, hier den Fader
       bewegen. Umgekehrt geht es auch: einen Regler in MadMapper bewegen, die
       Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.</p>
+    <p><b>Vollbild.</b> Unter <i>Einstellungen → Vollbild</i> verschwinden die
+      Leisten des Browsers — am Handy sind das schnell zwei Zentimeter Pult.
+      Ein- und ausschalten geht nur von Hand; beim naechsten Start faengt es
+      wieder normal an. Wer die App ueber <i>Zum Startbildschirm hinzufuegen</i>
+      installiert, startet ohnehin ohne Browserleisten.</p>
     <p><b>Live bedienen.</b> Regler ziehen relativ, ein Antippen aendert nie
       einen Wert. Seitlich ausweichen macht den Griff fein. Der Wert eines
       Faders steht in der Bahn und bleibt lesbar, wenn der Balken darueber

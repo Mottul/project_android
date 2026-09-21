@@ -29,6 +29,8 @@ installierbar, ohne Konto und ohne Cloud.
   Export/Import als JSON, Zuruecksetzen je Seite oder fuers ganze Projekt.
 * **Feedback.** Eingehendes OSC bewegt die Regler mit — ausser man haelt gerade
   den Finger drauf.
+* **Vollbild** auf Tastendruck (Einstellungen), oder gleich ueber „Zum
+  Startbildschirm hinzufuegen" ohne Browserleisten starten.
 * **Monitor.** Zeigt gesendete und empfangene Nachrichten. Auf eine empfangene
   Zeile tippen legt daraus sofort ein Bauteil an — so uebernimmt man Adressen
   direkt aus MadMapper.

@@ -21,7 +21,7 @@ import {
   loadLibrary, storeInLibrary, removeFromLibrary,
 } from './store.js';
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.7.0';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -646,6 +646,31 @@ function renderLibrary() {
 
 /* ------------------------------------------------------------ Bildschirm -- */
 
+/**
+ * Vollbild blendet die Leisten des Browsers aus — auf dem Handy sind das
+ * schnell zwei Zentimeter Pult. Der Haken zeigt den JETZIGEN Zustand, nicht
+ * einen gespeicherten Wunsch: Vollbild laesst sich nur auf Tastendruck
+ * einschalten, beim naechsten Start also nie von selbst.
+ */
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+
+const fsMoeglich = () => !!(document.fullscreenEnabled || document.webkitFullscreenEnabled
+  || document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+
+async function setFullscreen(on) {
+  const el = document.documentElement;
+  try {
+    if (on) await (el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen?.());
+    else await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen?.());
+  } catch { /* der Browser darf ablehnen — dann bleibt der Haken, wie er war */ }
+  paintFullscreen();
+}
+
+function paintFullscreen() {
+  const chk = $('#chkFull');
+  if (chk) chk.checked = !!fsElement();
+}
+
 async function requestWakeLock() {
   if (!settings.wakeLock || !('wakeLock' in navigator)) return;
   try {
@@ -813,6 +838,20 @@ function bind() {
       after?.();
     });
   };
+  /* Vollbild und Bildschirm: beides kann der Browser verweigern — dann steht
+     statt eines wirkungslosen Hakens ein Hinweis da. */
+  if (fsMoeglich()) {
+    $('#chkFull').addEventListener('change', (ev) => setFullscreen(ev.target.checked));
+    for (const name of ['fullscreenchange', 'webkitfullscreenchange']) {
+      document.addEventListener(name, paintFullscreen);
+    }
+    paintFullscreen();
+  } else {
+    $('#rowFull').hidden = true;
+    $('#noteFull').hidden = false;
+  }
+  $('#noteWake').hidden = 'wakeLock' in navigator;
+
   chk('#chkAuto', 'autoConnect');
   chk('#chkWake', 'wakeLock', () => { if (settings.wakeLock) requestWakeLock(); else { wakeLock?.release?.(); wakeLock = null; } });
   chk('#chkHaptic', 'haptics', () => setHaptics(settings.haptics));
