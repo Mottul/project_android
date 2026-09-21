@@ -34,6 +34,7 @@ der Teil, der spaeter nicht mehr billig zu aendern ist.
 
 | # | Punkt | Nutzen | Ort im Code |
 | --- | --- | --- | --- |
+| M0 | **MadMapper-Vorlage mit echten Adressen** | Die heutige Vorlage nennt sich MadMapper, benutzt aber erfundene Adressen (`/master/opacity`, `/surfaces/1/opacity` …). Mit der offiziellen Liste wuerde sie ohne „OSC lernen" auf Anhieb funktionieren — dazu passend geschnittene Seiten (Master & Surfaces, Medias & Cues, Effekte) | `presets.js` · **braucht die Adressliste**, siehe unten |
 | M1 | **Kurven je Fader** *(Modell)* | Helligkeit ist nicht linear; linear / logarithmisch / quadratisch, wirkt nur beim Senden — der Regler bleibt innen linear | `model.js` (`curve`), `widgets.js`, Test |
 | M2 | **Rampenzeit** *(Modell)* | Statt Sprung in *n* ms zum Ziel fahren — fuer Taster mit festem Wert und Grundstellungen | `widgets.js`, kleine Zeitschleife in `conn.js` |
 | M3 | **Rastpunkte** *(Modell)* | Fuehlbares Einrasten bei 0 / 50 / 100 % mit kurzem Vibrieren | `widgets.js` (`drag`) |
@@ -41,6 +42,7 @@ der Teil, der spaeter nicht mehr billig zu aendern ist.
 | M5 | **Gruppen-Master** *(Modell)* | Ein Fader skaliert mehrere Adressen prozentual | wie M4, gleiches Nachrichtenmodell |
 | M6 | **Mehrfachauswahl im Editor** | Mehrere Kacheln zugleich verschieben, faerben, loeschen | `editor.js`, `app.js` (Auswahl wird zur Menge) |
 | M7 | **Seitenwechsel per Wischen** | Zwischen Seiten blaettern ohne Reiter zu treffen — kollidiert mit dem Ziehen der Regler, braucht eine saubere Abgrenzung | `app.js`, `widgets.js` |
+| M9 | **Seite aus dem Monitor lernen** | Eine Weile lauschen und aus allem Gehoerten eine Seite bauen — findet die Adressen der eigenen Installation, unabhaengig von Programm und Version. Robuster als jede Vorlage | `app.js` (`logBuf`), `model.js` |
 | M8 | **Zwei Ziele gleichzeitig** | Haupt- und Reserverechner parallel versorgen | `bridge/osc-bridge.mjs`, Verbindungsblatt |
 
 ## L — Gross
@@ -94,6 +96,15 @@ Warteliste, werden sie neu geschnitten — betroffen ist meist nur eines:
   Sammel-Commit.
 
 ---
+
+## Quellen
+
+* MadMapper, feste OSC-Adressen und Kanalliste:
+  <https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list>
+  — Grundlage fuer **M0**. Aus der Entwicklungsumgebung heraus nicht abrufbar
+  (der Netzzugang ist dort gesperrt); der Inhalt muss also beim Umsetzen
+  vorliegen. Geraten wird nichts: eine falsche Adresse in einer Vorlage faellt
+  erst auf der Buehne auf, und dann als „geht nicht".
 
 ## Warteliste
 

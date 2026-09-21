@@ -40,6 +40,11 @@ installierbar, ohne Konto und ohne Cloud.
 * **NovaStar.** `/nova/brightness`, `/nova/blackout`, `/nova/freeze`,
   `/nova/preset` gehen als TCP-Befehle an den Prozessor.
 
+> Die Adressen der MadMapper-Vorlage sind **Vorschlaege**, keine festen
+> MadMapper-Adressen — zugeordnet werden sie dort per „OSC lernen". Die
+> vollstaendige Liste der festen Adressen steht in der
+> [MadMapper-Dokumentation](https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list).
+
 ## Bedienung
 
 Regler ziehen **relativ**: Antippen aendert nie einen Wert, erst die Bewegung.

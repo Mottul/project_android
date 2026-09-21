@@ -68,6 +68,9 @@ MadMapper, bleibt der Host 127.0.0.1.
 Welche Adresse welchen Regler steuert, legt MadMapper per "OSC lernen" fest:
 Regler auswaehlen, Lernen einschalten, in der App den Fader bewegen.
 
+Die festen Adressen (Master, Surfaces, Medias, Cues ...) listet MadMapper hier:
+https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list
+
 Farbe: MadMappers RGBA-Regler erwartet eine 32-Bit-Farbe (OSC-Typ "r"), nicht
 vier einzelne Zahlen. Das ist in der App die Vorgabe; umstellen laesst es sich
 im Bauteil unter Werte -> Nachricht.

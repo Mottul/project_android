@@ -1,8 +1,12 @@
 /**
- * Fertige Startseiten. Die Adressen sind Vorschlaege — welche Adresse ein
- * Bedienelement in MadMapper wirklich steuert, legt man dort ueber „OSC lernen"
- * fest: Regler in MadMapper auswaehlen, Lernen einschalten, hier den Fader
- * bewegen. Danach passt die Adresse, egal wie sie heisst.
+ * Fertige Startseiten. Die Adressen der MadMapper-Seite sind VORSCHLAEGE, keine
+ * festen MadMapper-Adressen: welche Adresse ein Bedienelement dort wirklich
+ * steuert, legt man ueber „OSC lernen" fest — Regler in MadMapper auswaehlen,
+ * Lernen einschalten, hier den Fader bewegen. Danach passt die Adresse, egal
+ * wie sie heisst.
+ *
+ * Die festen Adressen, die MadMapper von sich aus kennt, stehen hier:
+ * https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list
  *
  * Die NovaStar-Seite nutzt die Sonderadressen /nova/... — die Bruecke
  * uebersetzt sie in das TCP-Protokoll des Prozessors (Port 5200).
