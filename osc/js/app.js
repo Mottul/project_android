@@ -21,7 +21,7 @@ import {
   loadLibrary, storeInLibrary, removeFromLibrary,
 } from './store.js';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.5.1';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
