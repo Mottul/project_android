@@ -21,7 +21,7 @@ import {
   loadLibrary, storeInLibrary, removeFromLibrary,
 } from './store.js';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -644,6 +644,22 @@ function renderLibrary() {
   }
 }
 
+/* -------------------------------------------------------------- Aussehen -- */
+
+/**
+ * Dunkel (Vorgabe), hell, oder wie das System es haelt. Die Klasse `hell`
+ * schaltet im Stylesheet den ganzen Farbsatz um; gesetzt wird sie hier, damit
+ * die Systemeinstellung nur zaehlt, wenn man sie auch ausgewaehlt hat.
+ */
+const hellMedia = window.matchMedia('(prefers-color-scheme: light)');
+
+function applyTheme() {
+  const hell = settings.theme === 'light' || (settings.theme === 'auto' && hellMedia.matches);
+  document.documentElement.classList.toggle('hell', hell);
+  const meta = $('meta[name="theme-color"]');
+  if (meta) meta.content = hell ? '#ffffff' : '#0b0e13';
+}
+
 /* ------------------------------------------------------------ Bildschirm -- */
 
 /**
@@ -838,6 +854,15 @@ function bind() {
       after?.();
     });
   };
+  const theme = $('#selTheme');
+  theme.value = settings.theme;
+  theme.addEventListener('change', () => {
+    settings.theme = theme.value;
+    saveSettings(settings);
+    applyTheme();
+  });
+  hellMedia.addEventListener('change', applyTheme);
+
   /* Vollbild und Bildschirm: beides kann der Browser verweigern — dann steht
      statt eines wirkungslosen Hakens ein Hinweis da. */
   if (fsMoeglich()) {
@@ -911,6 +936,7 @@ function importProject(ev) {
 /* ----------------------------------------------------------------- Start -- */
 
 setHaptics(settings.haptics);
+applyTheme();
 bind();
 renderTabs();
 setMode('live');

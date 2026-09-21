@@ -32,6 +32,7 @@ export function defaultSettings() {
     target: { host: '127.0.0.1', port: 8000 },
     listenPort: 9000,
     nova: { host: '', port: 5200 },
+    theme: 'dark',         // 'dark' | 'light' | 'auto'
     autoConnect: true,
     wakeLock: true,
     haptics: true,
@@ -43,6 +44,7 @@ export function loadSettings() {
   const s = { ...defaultSettings(), ...read(K_SETTINGS, {}) };
   s.target = { ...defaultSettings().target, ...(s.target || {}) };
   s.nova = { ...defaultSettings().nova, ...(s.nova || {}) };
+  s.theme = ['dark', 'light', 'auto'].includes(s.theme) ? s.theme : 'dark';
   s.url = String(s.url || defaultBridgeUrl());
   return s;
 }
