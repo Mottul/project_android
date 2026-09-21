@@ -12,10 +12,10 @@
   --ok: #22c55e;
   --warn: #eab308;
   --err: #ef4444;
-  --gap: 8px;
+  --gap: 5px;
   --rowh: 40px;
   --bar: 52px;
-  --radius: 12px;
+  --radius: 10px;
   color-scheme: dark;
 }
 
@@ -122,7 +122,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   display: flex;
   flex-direction: column;
   min-width: 0; min-height: 0;
-  padding: 5px 6px 6px;
+  /* Knapper Rand: die Kachel soll das Bauteil zeigen, nicht sich selbst. */
+  padding: 3px 4px 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
@@ -131,7 +132,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
      (Kopfzeile, Schriftgroessen). So bleibt auch eine winzige Kachel lesbar. */
   container: tile / size;
 }
-.tile-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; min-width: 0; }
+.tile-head { display: flex; align-items: baseline; gap: 5px; margin-bottom: 2px; min-width: 0; }
 .tile-name {
   flex: 1 1 auto; min-width: 0;
   font-size: .72rem; font-weight: 650; letter-spacing: .02em;
@@ -154,7 +155,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: #0a0e14;
   border: 1px solid var(--line);
   overflow: hidden;
@@ -171,8 +172,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .trackval {
   position: absolute; inset: 0;
   display: grid; place-items: center;
-  font-size: clamp(.68rem, 14cqh, 1.05rem);
+  font-size: clamp(.58rem, min(16cqh, 26cqw), 1.05rem);
   font-weight: 650; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text);
   text-shadow: 0 1px 3px #000a;
   pointer-events: none;
@@ -183,7 +185,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   clip-path: inset(calc(100% - var(--n, 0) * 100%) 0 0 0);
 }
 .tile.horizontal .trackval.on { clip-path: inset(0 calc(100% - var(--n, 0) * 100%) 0 0); }
+/* Beim Fader IST die Bahn die Kachel: kein zweiter Rahmen im Rahmen und kein
+   Polster daneben. Die runden Ecken schneidet die Kachel selbst ab. */
+.t-fader .tile-body { margin: 0 -4px -4px; }
+.t-fader .track { border: 0; border-radius: 0; }
 .track.grab { border-color: var(--c); }
+.t-fader .track.grab { box-shadow: inset 0 0 0 2px var(--c); }
 .track.fine::after {
   content: "fein"; position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
   font-size: .62rem; letter-spacing: .08em; color: #04202e; background: var(--c);
@@ -203,7 +210,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* Bank aus Potis: je Zelle ein kleines Poti mit Beschriftung darunter.
    Das Poti bleibt quadratisch und so gross wie die Zelle zulaesst — Poti und
    Beschriftung stehen dadurch als Paar in der Mitte. */
-.pads.knobs { gap: 4px; }
+.pads.knobs { gap: 3px; }
 .kcell {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-width: 0; min-height: 0; gap: 2px;
@@ -220,13 +227,13 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   flex: 1 1 auto;
   min-width: 0; min-height: 0;
   display: grid; place-items: center;
-  border: 1.5px solid var(--c);
-  border-radius: 9px;
+  border: 1.2px solid var(--c);
+  border-radius: 8px;
   background: color-mix(in srgb, var(--c) 10%, transparent);
   color: var(--text);
   font: inherit; font-weight: 650; font-size: .95rem;
   text-align: center;
-  padding: 2px 6px;
+  padding: 1px 4px;
   overflow: hidden;
   touch-action: none;
 }
@@ -234,12 +241,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* Einzelner Taster fuellt die Kachel — die Schrift darf mitwachsen. */
 .t-toggle .pad, .t-button .pad { font-size: clamp(.7rem, 22cqh, 1.05rem); }
 .tile.on .pad, .pad.on { background: var(--c); color: #06121b; }
-.pads { flex: 1 1 auto; min-height: 0; display: grid; gap: 5px; grid-auto-rows: minmax(0, 1fr); }
+.pads { flex: 1 1 auto; min-height: 0; display: grid; gap: 4px; grid-auto-rows: minmax(0, 1fr); }
 
 /* XY */
 .xy {
   position: relative; flex: 1 1 auto; min-height: 0;
-  border-radius: 8px; background: #0a0e14; border: 1px solid var(--line);
+  border-radius: 7px; background: #0a0e14; border: 1px solid var(--line);
   overflow: hidden; touch-action: none;
 }
 .xy-h, .xy-v { position: absolute; background: color-mix(in srgb, var(--c) 35%, transparent); }
@@ -252,10 +259,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 }
 
 /* Farbe */
-.swatch { height: 26px; border-radius: 7px; border: 1px solid var(--line); flex: 0 0 auto; margin-bottom: 6px;
+.swatch { height: 22px; border-radius: 6px; border: 1px solid var(--line); flex: 0 0 auto; margin-bottom: 4px;
   background-image: repeating-conic-gradient(#0006 0% 25%, #fff3 0% 50%); background-size: 10px 10px; }
-.crows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
-.crow { display: flex; align-items: center; gap: 7px; flex: 1 1 0; min-height: 16px; }
+.crows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.crow { display: flex; align-items: center; gap: 5px; flex: 1 1 0; min-height: 14px; }
 .ctag { width: 12px; font-size: .68rem; color: var(--muted); flex: 0 0 auto; }
 .ctrack { position: relative; flex: 1 1 auto; height: 100%; min-height: 16px; border-radius: 6px; overflow: hidden; touch-action: none; border: 1px solid var(--line); }
 .c-r { background: linear-gradient(90deg, #000, #f00); }
@@ -269,7 +276,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .crows.compact .crow { flex: 0 0 26px; }
 .cgrid {
   flex: 1 1 auto; min-height: 0;
-  display: grid; gap: 5px;
+  display: grid; gap: 4px;
   grid-template-columns: repeat(auto-fit, minmax(26px, 1fr));
   grid-auto-rows: minmax(0, 1fr);
 }
@@ -290,37 +297,39 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .meter-bar { height: 8px; border-radius: 999px; background: #0a0e14; border: 1px solid var(--line); overflow: hidden; }
 .meter-fill { height: 100%; background: var(--c); transition: width .12s linear; }
 
-/* Winzige Kacheln: lieber das Bauteil zeigen als die Beschriftung.
+/* Enge Kacheln: erst geht die Schrift mit, dann erst verschwindet etwas.
    Die Selektoren sind absichtlich genauer als die Regeln weiter oben — sonst
    gewinnt dort etwa die Zwei-Zeilen-Regel des Faders gegen das Ausblenden.
    Ohne Container-Queries bleibt einfach alles sichtbar — kein Beinbruch. */
-@container tile (max-height: 58px) {
+@container tile (max-height: 52px) {
   .tile > .tile-head { display: none; }
 }
-/* Drei Spalten von zwoelf sind auf dem Handy rund 76px Inhalt — der Name
-   muss dort noch stehen. Erst darunter weicht er dem Wert. */
-@container tile (max-width: 56px) {
-  .tile > .tile-head > .tile-name { display: none; }
-  .tile > .tile-head > .tile-val { flex: 1 1 auto; text-align: center; }
+/* Beim Fader traegt die Kopfzeile nur den Namen — der Wert steht in der Bahn.
+   Deshalb bleibt der Name hier viel laenger stehen als anderswo: erst kleiner,
+   dann einzeilig, und ganz weg erst, wenn kein Buchstabe mehr hinpasst. */
+@container tile (max-width: 72px) {
+  .t-fader .tile-name { font-size: .64rem; letter-spacing: 0; }
 }
-/* Zu schmal fuer eine Zahl in der Bahn: dann steht sie wieder oben, sonst
-   schnitte die Kachel sie ab und „0.50" saehe aus wie „0". */
-@container tile (max-width: 56px) {
+@container tile (max-width: 46px) {
+  .t-fader .tile-name { font-size: .58rem; -webkit-line-clamp: 1; line-clamp: 1; }
+}
+@container tile (max-width: 26px) {
+  .tile > .tile-head { display: none; }
   .t-fader .trackval { display: none; }
-  .tile > .tile-head > .tile-val { display: block; font-size: .68rem; }
 }
-/* Und wo auch oben keine Zahl mehr hinpasst, bleibt nur das Bauteil selbst —
-   eine halbe Ziffer ist schlechter als keine. */
-@container tile (max-width: 44px) {
-  .tile > .tile-head { display: none; }
+/* Alle anderen zeigen Name UND Wert in einer Zeile — wird es eng, hat der
+   Wert Vorrang. */
+@container tile (max-width: 56px) {
+  .tile:not(.t-fader) > .tile-head > .tile-name { display: none; }
+  .tile:not(.t-fader) > .tile-head > .tile-val { flex: 1 1 auto; text-align: center; }
 }
 @container tile (max-height: 90px) {
   .pad.small { font-size: .74rem; }
 }
-@container tile (max-height: 40px) {
+@container tile (max-height: 36px) {
   .kcap { display: none; }
 }
-@container tile (max-width: 54px) {
+@container tile (max-width: 50px) {
   .kcap { display: none; }
 }
 
@@ -366,8 +375,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   border: 1px solid var(--accent); border-radius: 10px;
   background: #0f2432; padding: 6px 8px; gap: 6px;
 }
-.selrow { flex-wrap: nowrap; }
-.selrow .btn { min-height: 38px; padding: 0 12px; }
+.editbar .selrow { flex-wrap: nowrap; }
+.editbar .selrow .btn { min-height: 38px; padding: 0 10px; }
 /* Quadratische Symbolknoepfe (Rueckgaengig, Duplizieren, Loeschen) */
 .editbar .btn.sq { flex: 0 0 auto; width: 44px; padding: 0; display: grid; place-items: center; }
 .editbar .btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -570,6 +579,6 @@ input[type=color] { padding: 2px; height: 42px; }
 .stepper.wide .stepval { flex: 1 1 auto; text-align: center; font-size: 1rem; color: var(--text); font-variant-numeric: tabular-nums; }
 
 @media (min-width: 700px) {
-  :root { --gap: 10px; }
+  :root { --gap: 7px; }
   .sheet { left: 50%; transform: translateX(-50%); width: min(680px, 100%); border-radius: 18px 18px 0 0; }
 }

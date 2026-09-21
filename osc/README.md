@@ -12,9 +12,11 @@ installierbar, ohne Konto und ohne Cloud.
   Auswahl, XY-Pad, Farbe, Anzeige und Text. Die **Bank** ist ein Feld aus
   Tastern, Schaltern **oder Potis** — je Eintrag eine eigene Adresse, der Wert
   steht im Zifferblatt.
-* **Ablesbar im Halbdunkel.** Beim Fader steht der Wert in der Bahn und bleibt
+* **Ablesbar im Halbdunkel.** Beim Fader ist die Bahn die Kachel — rund neun
+  Zehntel der Flaeche sind Bedienflaeche. Der Wert steht in der Bahn und bleibt
   lesbar, wenn der Balken darueberlaeuft; oben hat dadurch der Name Platz (bis
-  zu zwei Zeilen). **Farbe** gibt es als R/G/B-Regler, als H/S/V-Regler
+  zu zwei Zeilen). Wird die Kachel schmaler, gehen Schriften mit, statt zu
+  verschwinden. **Farbe** gibt es als R/G/B-Regler, als H/S/V-Regler
   oder als Palette zum Antippen, die man sich selbst zusammenstellt — jeweils
   mit Deckkraft.
 * **Freies Raster.** Kacheln verschieben und an der Ecke unten rechts aufziehen,
