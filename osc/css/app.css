@@ -171,19 +171,22 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
    beschnitten (--n = Stellung 0..1), die helle liegt darunter. */
 .trackval {
   position: absolute; inset: 0;
-  display: grid; place-items: center;
-  font-size: clamp(.58rem, min(16cqh, 26cqw), 1.05rem);
+  /* Der Wert steht unten in der Bahn — wie die Beschriftung am Pult. */
+  display: grid; place-items: end center;
+  padding-bottom: 5px;
+  font-size: clamp(.75rem, min(16cqh, 26cqw), 1.05rem);
   font-weight: 650; font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--text);
-  text-shadow: 0 1px 3px #000a;
   pointer-events: none;
 }
 .trackval.on {
   color: #06121b;
-  text-shadow: none;
   clip-path: inset(calc(100% - var(--n, 0) * 100%) 0 0 0);
 }
+/* Waagerecht steht der Wert am selben Ende wie senkrecht: dort, wo der
+   Balken beginnt. So liegt er meist auf der Farbe statt mittendrin. */
+.tile.horizontal .trackval { place-items: end start; padding-left: 7px; }
 .tile.horizontal .trackval.on { clip-path: inset(0 calc(100% - var(--n, 0) * 100%) 0 0); }
 /* Beim Fader IST die Bahn die Kachel: kein zweiter Rahmen im Rahmen und kein
    Polster daneben. Die runden Ecken schneidet die Kachel selbst ab. */
