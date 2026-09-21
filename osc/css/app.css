@@ -1,22 +1,70 @@
 /* OSC Pad — Buehnenpult fuers Handy. Dunkel, kontraststark, grosse Ziele. */
 
 :root {
+  /* Dunkel ist die Vorgabe: auf der Buehne blendet nichts. */
   --bg: #0b0e13;
   --card: #151a22;
   --card-2: #1b2230;
+  --sunk: #0a0e14;          /* vertieft: Faderbahn, Eingabefeld, Protokoll */
+  --chrome: #0e131b;        /* Kopf- und Werkzeugleiste */
+  --sheet: #10151d;         /* Blaetter */
+  --tint: #0f2432;          /* leicht eingefaerbte Flaeche (aktive Seite, Auswahl) */
+  --knob-track: #1c2432;
   --line: #232b38;
   --line-2: #33405480;
   --text: #e9eef5;
   --muted: #8494a8;
   --accent: #38bdf8;
+  --on-accent: #04202e;     /* Schrift auf der Akzentfarbe */
+  --on-color: #06121b;      /* Schrift auf der Farbe eines Bauteils */
   --ok: #22c55e;
   --warn: #eab308;
   --err: #ef4444;
+  --danger-fg: #fca5a5;
+  --danger-line: #7f1d1d;
+  --log-in: #7dd3fc;
+  --log-out: #a3e635;
+  --scrim: #000a;
+  --shadow: #000a;
   --gap: 5px;
   --rowh: 40px;
   --bar: 52px;
   --radius: 10px;
   color-scheme: dark;
+}
+
+/**
+ * Helles Design — fuer Tageslicht, Probe und Schreibtisch. Gesetzt wird die
+ * Klasse von der App (Einstellungen: dunkel, hell oder wie das System).
+ * Die Farben der Bauteile bleiben dieselben; sie sitzen kraeftig genug, um
+ * auf Weiss zu bestehen.
+ */
+:root.hell {
+  --bg: #e9edf3;
+  --card: #ffffff;
+  --card-2: #f1f4f9;
+  --sunk: #e4e9f0;
+  --chrome: #ffffff;
+  --sheet: #ffffff;
+  --tint: #dceefb;
+  --knob-track: #d5dde8;
+  --line: #c5cfdd;
+  --line-2: #94a3b899;
+  --text: #0f172a;
+  --muted: #5a6879;
+  --accent: #0369a1;
+  --on-accent: #ffffff;
+  --on-color: #0b1220;
+  --ok: #15803d;
+  --warn: #a16207;
+  --err: #dc2626;
+  --danger-fg: #b91c1c;
+  --danger-line: #f0a8a8;
+  --log-in: #0369a1;
+  --log-out: #3f6212;
+  --scrim: #0f172a59;
+  --shadow: #0f172a33;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -38,7 +86,7 @@ body {
 
 h2 { margin: 0; font-size: 1.05rem; font-weight: 650; }
 h3 { margin: 18px 0 8px; font-size: .85rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: #0c1119; border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--sunk); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
 
 /* ------------------------------------------------------------ Kopfzeile -- */
 .bar {
@@ -47,7 +95,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   align-items: center;
   gap: 6px;
   padding: calc(env(safe-area-inset-top) + 6px) 8px 6px;
-  background: #0e131b;
+  background: var(--chrome);
   border-bottom: 1px solid var(--line);
 }
 .icon {
@@ -60,7 +108,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   color: var(--text);
 }
 .icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.icon[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #04202e; }
+.icon[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .pagetabs {
   flex: 1 1 auto;
@@ -83,7 +131,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   font-weight: 600;
   white-space: nowrap;
 }
-.pagetab.on { color: var(--text); border-color: var(--accent); background: #0f2432; }
+.pagetab.on { color: var(--text); border-color: var(--accent); background: var(--tint); }
 
 .status {
   flex: 0 0 auto;
@@ -98,7 +146,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   font-variant-numeric: tabular-nums;
 }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
-.dot.on { background: var(--ok); box-shadow: 0 0 0 3px #22c55e26; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
 .dot.wait { background: var(--warn); }
 .dot.err { background: var(--err); }
 
@@ -156,7 +204,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   flex: 1 1 auto;
   min-height: 0;
   border-radius: 7px;
-  background: #0a0e14;
+  background: var(--sunk);
   border: 1px solid var(--line);
   overflow: hidden;
   touch-action: none;
@@ -181,7 +229,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   pointer-events: none;
 }
 .trackval.on {
-  color: #06121b;
+  color: var(--on-color);
   clip-path: inset(calc(100% - var(--n, 0) * 100%) 0 0 0);
 }
 /* Waagerecht steht der Wert am selben Ende wie senkrecht: dort, wo der
@@ -196,18 +244,18 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .t-fader .track.grab { box-shadow: inset 0 0 0 2px var(--c); }
 .track.fine::after {
   content: "fein"; position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
-  font-size: .62rem; letter-spacing: .08em; color: #04202e; background: var(--c);
+  font-size: .62rem; letter-spacing: .08em; color: var(--on-color); background: var(--c);
   border-radius: 5px; padding: 1px 5px;
 }
 
 /* Poti — das SVG skaliert selbst mit und bleibt dabei mittig (kein Abschneiden) */
 .knob { flex: 1 1 auto; min-width: 0; min-height: 0; display: block; touch-action: none; }
 .knob svg { width: 100%; height: 100%; display: block; }
-.k-bg { fill: #0a0e14; stroke: var(--line); stroke-width: 2; }
-.k-track { fill: none; stroke: #1c2432; stroke-width: 6; stroke-linecap: round; }
+.k-bg { fill: var(--sunk); stroke: var(--line); stroke-width: 2; }
+.k-track { fill: none; stroke: var(--knob-track); stroke-width: 6; stroke-linecap: round; }
 .k-arc { fill: none; stroke: var(--c); stroke-width: 6; stroke-linecap: round; }
 .k-ptr { stroke: var(--c); stroke-width: 5; stroke-linecap: round; }
-.knob.fine .k-ptr { stroke: #fff; }
+.knob.fine .k-ptr { stroke: var(--text); }
 .k-val { fill: var(--text); font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
 
 /* Bank aus Potis: je Zelle ein kleines Poti mit Beschriftung darunter.
@@ -243,13 +291,13 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .pad.small { font-size: .85rem; }
 /* Einzelner Taster fuellt die Kachel — die Schrift darf mitwachsen. */
 .t-toggle .pad, .t-button .pad { font-size: clamp(.7rem, 22cqh, 1.05rem); }
-.tile.on .pad, .pad.on { background: var(--c); color: #06121b; }
+.tile.on .pad, .pad.on { background: var(--c); color: var(--on-color); }
 .pads { flex: 1 1 auto; min-height: 0; display: grid; gap: 4px; grid-auto-rows: minmax(0, 1fr); }
 
 /* XY */
 .xy {
   position: relative; flex: 1 1 auto; min-height: 0;
-  border-radius: 7px; background: #0a0e14; border: 1px solid var(--line);
+  border-radius: 7px; background: var(--sunk); border: 1px solid var(--line);
   overflow: hidden; touch-action: none;
 }
 .xy-h, .xy-v { position: absolute; background: color-mix(in srgb, var(--c) 35%, transparent); }
@@ -257,8 +305,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .xy-v { top: 0; bottom: 0; width: 1px; }
 .xy-dot {
   position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px;
-  border-radius: 50%; border: 2px solid #fff; background: color-mix(in srgb, var(--c) 60%, transparent);
-  box-shadow: 0 2px 8px #000a;
+  border-radius: 50%; border: 2px solid var(--text); background: color-mix(in srgb, var(--c) 60%, transparent);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 
 /* Farbe */
@@ -274,7 +322,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .c-a { background: linear-gradient(90deg, #000, #fff); }
 .c-h { background: linear-gradient(90deg, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00); }
 .c-s, .c-v { background: var(--g, linear-gradient(90deg, #000, #fff)); }
-.cfill { position: absolute; top: 0; bottom: 0; left: 0; border-right: 2px solid #fff; }
+.cfill { position: absolute; top: 0; bottom: 0; left: 0; border-right: 2px solid var(--text); }
 /* Grundfarben und Farbwaehler: oben die Flaeche, unten die Deckkraft */
 .crows.compact .crow { flex: 0 0 26px; }
 .cgrid {
@@ -297,7 +345,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .label-text[style*="right"] { justify-content: flex-end; }
 .meter-val { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; margin-bottom: 6px; word-break: break-word; }
 .meter-val { font-size: clamp(.85rem, 26cqh, 1.6rem); }
-.meter-bar { height: 8px; border-radius: 999px; background: #0a0e14; border: 1px solid var(--line); overflow: hidden; }
+.meter-bar { height: 8px; border-radius: 999px; background: var(--sunk); border: 1px solid var(--line); overflow: hidden; }
 .meter-fill { height: 100%; background: var(--c); transition: width .12s linear; }
 
 /* Enge Kacheln: erst geht die Schrift mit, dann erst verschwindet etwas.
@@ -340,7 +388,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .surface.editing .tile-body,
 .surface.locked .tile-body { pointer-events: none; }
 .surface.editing .tile { border-style: dashed; border-color: var(--line-2); touch-action: none; cursor: move; }
-.surface.editing .tile.sel { border-color: var(--accent); border-style: solid; box-shadow: 0 0 0 2px #38bdf855; }
+.surface.editing .tile.sel { border-color: var(--accent); border-style: solid; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
 .surface.editing .tile.moving { opacity: .8; z-index: 5; }
 .handle {
   position: absolute; right: 2px; bottom: 2px; width: 30px; height: 30px;
@@ -357,17 +405,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .dropspot {                 /* Vorschau, wohin die Kachel faellt */
   border: 2px dashed var(--accent);
   border-radius: var(--radius);
-  background: #38bdf81a;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   pointer-events: none;
 }
 .dropspot.push {            /* dort liegt schon etwas — es weicht nach unten */
   border-color: var(--warn);
-  background: #eab3081a;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
 
 .editbar {
   flex: 0 0 auto;
-  background: #0e131b;
+  background: var(--chrome);
   border-top: 1px solid var(--line);
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   display: grid; gap: 8px;
@@ -376,7 +424,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* Leiste zum gewaehlten Bauteil: Einstellungen, Duplizieren, Loeschen */
 .selrow {
   border: 1px solid var(--accent); border-radius: 10px;
-  background: #0f2432; padding: 6px 8px; gap: 6px;
+  background: var(--tint); padding: 6px 8px; gap: 6px;
 }
 .editbar .selrow { flex-wrap: nowrap; }
 .editbar .selrow .btn { min-height: 38px; padding: 0 10px; }
@@ -399,7 +447,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .hint { position: absolute; inset: auto 0 40% 0; text-align: center; color: var(--muted); padding: 0 24px; pointer-events: none; }
 
 /* --------------------------------------------------------------- Sheets -- */
-.scrim { position: fixed; inset: 0; background: #000a; z-index: 40; backdrop-filter: blur(2px); }
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; backdrop-filter: blur(2px); }
 /* Der nachklappernde Klick eines Fingertipps soll das Blatt, das er gerade
    geoeffnet hat, nicht gleich wieder schliessen. */
 .scrim.fresh, .sheet.fresh { pointer-events: none; }
@@ -407,10 +455,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   max-height: 88dvh;
   display: flex; flex-direction: column;
-  background: #10151d;
+  background: var(--sheet);
   border-top: 1px solid var(--line);
   border-radius: 18px 18px 0 0;
-  box-shadow: 0 -12px 40px #000a;
+  box-shadow: 0 -12px 40px var(--shadow);
   animation: rise .18s ease-out;
 }
 @keyframes rise { from { transform: translateY(18px); opacity: .4; } to { transform: none; opacity: 1; } }
@@ -440,9 +488,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 }
 .btn:active { filter: brightness(1.25); }
 .btn:disabled { opacity: .38; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #04202e; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.ghost { background: transparent; }
-.btn.danger { color: #fca5a5; border-color: #7f1d1d; }
+.btn.danger { color: var(--danger-fg); border-color: var(--danger-line); }
 .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 .row.wrap { flex-wrap: wrap; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -454,7 +502,7 @@ input, select, textarea {
   width: 100%; min-height: 42px;
   padding: 8px 10px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: #0a0e14; color: var(--text);
+  background: var(--sunk); color: var(--text);
   font: inherit; font-size: 16px;
 }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -471,7 +519,7 @@ input[type=color] { padding: 2px; height: 42px; }
 .steps { margin: 8px 0 0; padding-left: 20px; font-size: .85rem; line-height: 1.6; color: var(--text); }
 .steps a { color: var(--accent); }
 
-.statusbox { border: 1px solid var(--line); border-radius: 10px; background: #0a0e14; padding: 10px 12px; font-size: .84rem; display: grid; gap: 4px; }
+.statusbox { border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); padding: 10px 12px; font-size: .84rem; display: grid; gap: 4px; }
 .statusbox b { font-weight: 650; }
 .statusbox .k { color: var(--muted); }
 
@@ -482,7 +530,7 @@ input[type=color] { padding: 2px; height: 42px; }
 .connrow .field.port { flex: 0 0 82px; }
 .connrow .btn { flex: 0 0 auto; }
 .connrow .btn.grow { flex: 1 1 0; }
-.more { margin: 14px 0 0; border: 1px solid var(--line); border-radius: 10px; background: #0a0e14; }
+.more { margin: 14px 0 0; border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); }
 .more > summary { padding: 11px 13px; font-size: .86rem; font-weight: 650; cursor: pointer; }
 .more[open] > summary { border-bottom: 1px solid var(--line); }
 .more > :not(summary) { margin-left: 13px; margin-right: 13px; }
@@ -512,7 +560,7 @@ input[type=color] { padding: 2px; height: 42px; }
 .item.cur { border-color: var(--accent); }
 .item {
   display: flex; align-items: center; gap: 8px;
-  border: 1px solid var(--line); border-radius: 10px; background: #0a0e14; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); padding: 8px 10px;
   font-size: .88rem;
 }
 .item .grow { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -521,13 +569,13 @@ input[type=color] { padding: 2px; height: 42px; }
 
 .log {
   height: 220px; overflow: auto; margin-top: 8px;
-  border: 1px solid var(--line); border-radius: 10px; background: #0a0e14;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--sunk);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem;
 }
-.log div { padding: 4px 8px; border-bottom: 1px solid #1a2230; white-space: pre-wrap; word-break: break-all; }
-.log .in { color: #7dd3fc; }
-.log .out { color: #a3e635; }
-.log .err { color: #fca5a5; }
+.log div { padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: pre-wrap; word-break: break-all; }
+.log .in { color: var(--log-in); }
+.log .out { color: var(--log-out); }
+.log .err { color: var(--danger-fg); }
 .log .t { color: var(--muted); }
 
 .itemrow { display: grid; grid-template-columns: 1fr 1fr 80px 34px; gap: 6px; align-items: center; margin-bottom: 6px; }
@@ -546,12 +594,12 @@ input[type=color] { padding: 2px; height: 42px; }
   fill: none; stroke: var(--accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
 }
 .pico-t { font-size: .82rem; font-weight: 650; }
-.pico:active { border-color: var(--accent); background: #0f2432; }
+.pico:active { border-color: var(--accent); background: var(--tint); }
 
 /* ------------------------------------------------------- Inspektor-Reiter -- */
 .tabs {
   display: flex; gap: 4px; padding: 3px;
-  border: 1px solid var(--line); border-radius: 12px; background: #0a0e14;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--sunk);
   position: sticky; top: 0; z-index: 2;
 }
 .tab {

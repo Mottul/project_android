@@ -191,6 +191,14 @@
 <section class="sheet" id="sheetSettings" hidden aria-label="Einstellungen">
   <div class="sheet-head"><button class="icon back" data-back aria-label="Zurueck">‹</button><h2>Einstellungen</h2></div>
   <div class="sheet-body">
+    <label class="field"><span>Aussehen</span>
+      <select id="selTheme">
+        <option value="dark">Dunkel</option>
+        <option value="light">Hell</option>
+        <option value="auto">Wie das System</option>
+      </select>
+    </label>
+
     <label class="check" id="rowFull"><input type="checkbox" id="chkFull"> Vollbild</label>
     <p class="note" id="noteFull" hidden>Vollbild kann dieser Browser nicht. Auf dem iPhone
       geht es ueber <i>Teilen → Zum Home-Bildschirm</i> — so gestartet laeuft die App
@@ -241,6 +249,10 @@
       MadMapper den Regler auswaehlen, Lernen einschalten, hier den Fader
       bewegen. Umgekehrt geht es auch: einen Regler in MadMapper bewegen, die
       Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.</p>
+    <p><b>Aussehen.</b> Unter <i>Einstellungen → Aussehen</i> stehen
+      <b>Dunkel</b> (Vorgabe, blendet auf der Buehne nicht), <b>Hell</b> fuer
+      Tageslicht und Probe, sowie <b>Wie das System</b>. Die Farben der
+      Bauteile bleiben dieselben — nur die Oberflaeche darum wechselt.</p>
     <p><b>Vollbild.</b> Unter <i>Einstellungen → Vollbild</i> verschwinden die
       Leisten des Browsers — am Handy sind das schnell zwei Zentimeter Pult.
       Ein- und ausschalten geht nur von Hand; beim naechsten Start faengt es

@@ -238,7 +238,8 @@ function colorRow(current, onpick) {
     const b = el('button', 'iconbtn');
     b.type = 'button';
     b.style.background = c;
-    b.style.borderColor = c === current ? '#fff' : 'transparent';
+    // Im hellen Design wuerde ein weisses Feld sonst mit der Kachel verschmelzen.
+    b.style.borderColor = c === current ? 'var(--text)' : 'var(--line)';
     b.setAttribute('aria-label', c);
     b.addEventListener('click', () => onpick(c));
     row.append(b);
