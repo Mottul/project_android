@@ -230,7 +230,7 @@
 
     <h3>Ganzes Projekt</h3>
     <p class="note">Stellt den Auslieferungszustand her: die Seiten
-      <b>MadMapper</b> und <b>NovaStar</b>, so wie beim ersten Start.
+      <b>MM Master</b>, <b>MM Cues</b> und <b>NovaStar</b>, so wie beim ersten Start.
       Verbindungseinstellungen bleiben erhalten.</p>
     <button class="btn danger" id="btnResetAll">Auf Werkseinstellung zuruecksetzen</button>
     <p class="note">Vorher lohnt sich „Projekt sichern &amp; laden → Sichern".</p>
@@ -251,9 +251,16 @@
       Adresse taucht im Monitor auf, antippen — fertig ist das Bauteil.
       Die vollstaendige Liste der festen Adressen steht in der
       <a href="https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list" target="_blank" rel="noreferrer">MadMapper-Dokumentation</a>.</p>
-    <p class="note">Die Adressen der mitgelieferten Vorlage sind <b>Vorschlaege</b>,
-      keine festen MadMapper-Adressen — sie funktionieren, sobald man sie per
-      „OSC lernen" zuordnet.</p>
+    <p><b>Die Vorlagen.</b> <i>MM Master</i>, <i>MM Cues</i> und <i>MM Medien</i>
+      benutzen die festen Adressen aus der Kanalliste und funktionieren ohne
+      Lernen. Fuer einzelne <b>Surfaces</b> gibt es keine festen Adressen: in
+      MadMapper mit der rechten Maustaste auf den Regler → <i>Copy OSC
+      address</i>, dann hier ins Adressfeld einsetzen.</p>
+    <p class="note">Zwei Stellen sind Geschmack, keine Vorgabe: der Bereich des
+      <b>BPM</b>-Faders (40–240) ist eine Annahme, und die Spalten der
+      Zeitleiste laufen als Taster — beides im Bauteil unter <i>Werte</i>
+      aenderbar. Befehle ohne Nutzlast (TAP, Stopp, naechstes Medium) stehen
+      dort auf „ohne Wert (Ausloeser)".</p>
     <p><b>Aussehen.</b> Unter <i>Einstellungen → Aussehen</i> stehen
       <b>Dunkel</b> (Vorgabe, blendet auf der Buehne nicht), <b>Hell</b> fuer
       Tageslicht und Probe, sowie <b>Wie das System</b>. Die Farben der

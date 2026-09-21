@@ -40,6 +40,13 @@ const norm = (w, v) => clamp01((v - lo(w)) / span(w));
 export const arg = (w, v) => (w.argType === 'i' ? { type: 'i', value: Math.round(v) } : { type: 'f', value: v });
 
 /**
+ * Argumentliste einer Nachricht. Manche Befehle erwarten GAR KEINEN Wert —
+ * in MadMapper etwa /master/Global_BPM/TAP oder /media/next. Die Adresse
+ * allein ist dann die Nachricht.
+ */
+export const args = (w, v) => (w.argType === 'n' ? [] : [arg(w, v)]);
+
+/**
  * Relatives Ziehen mit Feinstufen.
  * @param {HTMLElement} node   Flaeche, auf der gezogen wird
  * onEnd bekommt mit, ob wirklich gezogen wurde — ein blosses Antippen schickt
@@ -338,7 +345,7 @@ export function createWidget(w, ctx) {
         w.value = w.value >= 0.5 ? 0 : 1;
         api.paint();
         tick();
-        send(w.address, [arg(w, w.value >= 0.5 ? w.onValue : w.offValue)], true);
+        send(w.address, args(w, w.value >= 0.5 ? w.onValue : w.offValue), true);
         ctx.commit();
       });
     } else {
@@ -348,14 +355,17 @@ export function createWidget(w, ctx) {
         w.value = 1;
         api.paint();
         tick(15);
-        send(w.address, [arg(w, w.onValue)], true);
+        send(w.address, args(w, w.onValue), true);
       };
       const up = () => {
         if (!touching) return;
         touching = false;
         w.value = 0;
         api.paint();
-        send(w.address, [arg(w, w.offValue)], true);
+        // Ein Befehl ohne Wert loest EINMAL aus, beim Druecken. Ohne diese
+        // Ausnahme kaeme beim Loslassen dieselbe Nachricht ein zweites Mal —
+        // ein TAP waere dann ein Doppeltap.
+        if (w.argType !== 'n') send(w.address, args(w, w.offValue), true);
       };
       btn.addEventListener('pointerdown', down);
       btn.addEventListener('pointerup', up);
@@ -438,8 +448,8 @@ export function createWidget(w, ctx) {
       // Regel: hat der Eintrag eine eigene Adresse, geht dorthin An/Aus.
       // Sonst geht der Wert des Eintrags an die Adresse des Widgets.
       const addr = item.address || w.address;
-      const onArgs = () => [arg(w, item.address ? w.onValue : item.value)];
-      const offArgs = () => [arg(w, item.address ? w.offValue : item.value)];
+      const onArgs = () => args(w, item.address ? w.onValue : item.value);
+      const offArgs = () => args(w, item.address ? w.offValue : item.value);
 
       if (w.type === 'select') {
         b.addEventListener('click', () => {

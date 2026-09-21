@@ -1,7 +1,7 @@
 # Fahrplan
 
 Was an OSC Pad noch offen ist — alle Ideen aus der Entwicklung, nach Aufwand
-sortiert, mit einem Plan zum Abarbeiten. Stand: App 1.8.0, Bruecke 1.1.0.
+sortiert, mit einem Plan zum Abarbeiten. Stand: App 1.9.0, Bruecke 1.1.0.
 
 **Aufwand.** `S` = eine Sitzung, wenige Dutzend Zeilen an ein bis zwei Stellen.
 `M` = ein halber bis ganzer Tag; beruehrt mehrere Dateien oder das Datenmodell.
@@ -34,7 +34,6 @@ der Teil, der spaeter nicht mehr billig zu aendern ist.
 
 | # | Punkt | Nutzen | Ort im Code |
 | --- | --- | --- | --- |
-| M0 | **MadMapper-Vorlage mit echten Adressen** | Die heutige Vorlage nennt sich MadMapper, benutzt aber erfundene Adressen (`/master/opacity`, `/surfaces/1/opacity` …). Mit der offiziellen Liste wuerde sie ohne „OSC lernen" auf Anhieb funktionieren — dazu passend geschnittene Seiten (Master & Surfaces, Medias & Cues, Effekte) | `presets.js` · **braucht die Adressliste**, siehe unten |
 | M1 | **Kurven je Fader** *(Modell)* | Helligkeit ist nicht linear; linear / logarithmisch / quadratisch, wirkt nur beim Senden — der Regler bleibt innen linear | `model.js` (`curve`), `widgets.js`, Test |
 | M2 | **Rampenzeit** *(Modell)* | Statt Sprung in *n* ms zum Ziel fahren — fuer Taster mit festem Wert und Grundstellungen | `widgets.js`, kleine Zeitschleife in `conn.js` |
 | M3 | **Rastpunkte** *(Modell)* | Fuehlbares Einrasten bei 0 / 50 / 100 % mit kurzem Vibrieren | `widgets.js` (`drag`) |
@@ -75,7 +74,6 @@ Vier Regeln, nach denen die Buendel geschnitten sind:
 
 | Buendel | Inhalt | Warum zusammen |
 | --- | --- | --- |
-| **0 · Vorlagen** | M0 | Steht fuer sich: nur `presets.js`, aber blockiert, bis die Adressliste vorliegt. Sobald sie da ist, in einem Zug — Vorlagen schneidet man besser am Stueck als einzeln. |
 | **1 · Adressen** | S1, S2, S3 (+ M9) | Alle fassen dieselbe Stelle an: die Adressliste beim Zeichnen, das Adressfeld, das Protokoll. Zusammen ein Gedanke — Adressen sehen, waehlen, senden. **M9** passt in denselben Aufwasch und macht aus dem Buendel etwa einen Tag statt eines halben. |
 | **2 · Live-Sicherheit** | S5, S7, S9, S10 | Alles Verhalten am Finger im Live-Betrieb; ein Testlauf deckt alle vier ab. S9 und S10 bringen die ersten neuen Modellfelder mit. |
 | **3 · Kleinkram** | S4, S6, S8, S11, S12 | Streut ueber die Dateien, aber jeder Punkt ist unter einer halben Stunde — ein Sammel-Commit statt fuenf. |
@@ -102,10 +100,14 @@ Warteliste, werden sie neu geschnitten — betroffen ist meist nur eines:
 
 * MadMapper, feste OSC-Adressen und Kanalliste:
   <https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list>
-  — Grundlage fuer **M0**. Aus der Entwicklungsumgebung heraus nicht abrufbar
-  (der Netzzugang ist dort gesperrt); der Inhalt muss also beim Umsetzen
-  vorliegen. Geraten wird nichts: eine falsche Adresse in einer Vorlage faellt
-  erst auf der Buehne auf, und dann als „geht nicht".
+  — war die Grundlage fuer **M0**, eingearbeitet in `js/presets.js`. Aus der
+  Entwicklungsumgebung heraus nicht abrufbar (der Netzzugang ist dort
+  gesperrt), die Seite lag beim Umsetzen als Datei vor. Geraten wurde nichts:
+  eine falsche Adresse in einer Vorlage faellt erst auf der Buehne auf, und
+  dann als „geht nicht". Offen bleibt, was die Liste nicht hergibt: einzelne
+  Surfaces haben keine festen Adressen (in MadMapper per Rechtsklick → *Copy
+  OSC address* oder „OSC lernen"), und der BPM-Bereich 40–240 ist eine
+  Annahme.
 
 ## Warteliste
 
@@ -129,3 +131,5 @@ Damit nichts doppelt vorgeschlagen wird — alles aus derselben Entwicklung:
 * Fader: Wert in der Bahn, Name zweizeilig, knapper Rahmen
 * Bruecke: QR-Code, Adressbewertung, „diese Adresse ist die richtige"
 * Vollbild, helles Design
+* MadMapper-Vorlagen mit den echten Adressen der Kanalliste: MM Master,
+  MM Cues, MM Medien; Nachricht „ohne Wert" fuer die `nil`-Befehle (M0)

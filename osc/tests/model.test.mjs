@@ -8,6 +8,8 @@ import {
   BASE_COLORS, COLOR_MODES, defaultPalette, hsv2rgb, rgb2hsv,
 } from '../js/model.js';
 import { buildPreset, starterProject, PRESETS } from '../js/presets.js';
+import { isValidAddress, encodeMessage, decodePacket } from '../js/osc.js';
+import { args } from '../js/widgets.js';
 
 const rect = (gx, gy, cw, ch, id = 'x') => ({ id, gx, gy, cw, ch });
 
@@ -132,10 +134,69 @@ test('alle Vorlagen sind ueberschneidungsfrei und passen ins Raster', () => {
   }
 });
 
-test('Startprojekt hat MadMapper- und NovaStar-Seite', () => {
+test('Startprojekt bringt die MadMapper- und die NovaStar-Seiten mit', () => {
   const p = starterProject();
-  assert.deepEqual(p.pages.map((x) => x.name), ['MadMapper', 'NovaStar']);
+  assert.deepEqual(p.pages.map((x) => x.name), ['MM Master', 'MM Cues', 'NovaStar']);
   assert.equal(p.currentPageId, p.pages[0].id);
+});
+
+test('alle Vorlagen benutzen gueltige OSC-Adressen', () => {
+  for (const preset of PRESETS) {
+    for (const x of buildPreset(preset.id).widgets) {
+      if (x.type === 'label') continue;
+      assert.ok(isValidAddress(x.address), `${preset.id}: „${x.address}" bei ${x.label}`);
+      for (const it of x.items) {
+        if (it.address) assert.ok(isValidAddress(it.address), `${preset.id}: „${it.address}"`);
+      }
+    }
+  }
+});
+
+test('die MadMapper-Vorlagen halten sich an die dokumentierten Adressen', () => {
+  const master = buildPreset('mm-master').widgets;
+  const holen = (label) => master.find((x) => x.label === label);
+  assert.equal(holen('Master').address, '/master/master_level');
+  assert.equal(holen('Master-Farbe').address, '/master/video_color/rgba');
+  assert.equal(holen('Master-Farbe').colorArg, 'rgba32', 'die Liste nennt dafuer den Typ Color');
+  assert.equal(holen('TAP').argType, 'n', 'TAP ist in der Liste ein Befehl ohne Wert');
+  assert.equal(holen('Freeze Video').argType, 'i', 'BOOL wird als 1/0 geschickt');
+
+  const cues = buildPreset('mm-cues').widgets;
+  const spalten = cues.find((x) => x.label === 'Spalten');
+  assert.equal(spalten.items.length, 16);
+  assert.equal(spalten.items[0].address, '/timelines/Bank-1/columns/1');
+  assert.equal(spalten.items[15].address, '/timelines/Bank-1/columns/16');
+  assert.equal(cues.find((x) => x.label === 'Stopp').argType, 'n');
+
+  const medien = buildPreset('mm-medien').widgets;
+  assert.equal(medien.find((x) => x.label === 'Medium ▶').address, '/media/next');
+  assert.equal(medien.find((x) => x.label === 'Medium waehlen').argType, 'i', '/media/select erwartet eine Ganzzahl');
+
+  // Erfundene Adressen der ersten Fassung duerfen nirgends mehr vorkommen.
+  const alle = PRESETS.flatMap((x) => buildPreset(x.id).widgets).map((x) => x.address).join(' ');
+  for (const alt of ['/surfaces/', '/master/opacity', '/cues/', '/master/bpm/tap']) {
+    assert.ok(!alle.includes(alt), `„${alt}" ist eine erfundene Adresse und muss weg sein`);
+  }
+});
+
+test('ein Ausloeser schickt die Adresse allein', () => {
+  const trigger = makeWidget('button', { address: '/master/Global_BPM/TAP', argType: 'n' });
+  assert.deepEqual(args(trigger, 1), [], 'keine Argumente');
+  const buf = new Uint8Array(encodeMessage(trigger.address, args(trigger, 1)));
+  const text = new TextDecoder().decode(buf);
+  assert.ok(text.startsWith('/master/Global_BPM/TAP'), 'die Adresse steht drin');
+  assert.ok(text.includes(','), 'die Typenliste ist da, nur leer');
+  assert.equal(buf.length % 4, 0);
+  assert.deepEqual(decodePacket(buf)[0].args, [], 'und kommt leer wieder an');
+
+  const zahl = makeWidget('button', { address: '/x', argType: 'i', onValue: 1 });
+  assert.deepEqual(args(zahl, 1), [{ type: 'i', value: 1 }]);
+});
+
+test('„ohne Wert" ueberlebt das Normalisieren, Unsinn nicht', () => {
+  assert.equal(normalizeWidget({ type: 'button', argType: 'n' }).argType, 'n');
+  assert.equal(normalizeWidget({ type: 'button', argType: 'i' }).argType, 'i');
+  assert.equal(normalizeWidget({ type: 'button', argType: 'x' }).argType, 'f');
 });
 
 test('Standardraster ist zwoelfspaltig', () => {
@@ -281,7 +342,7 @@ test('recolumn laesst die Groessen stehen', () => {
 });
 
 test('Spalten hin und zurueck laesst den Aufbau heil', () => {
-  const page = buildPreset('madmapper');
+  const page = buildPreset('mm-master');
   const vorher = page.widgets.map((w) => `${w.label}:${w.gx},${w.gy} ${w.cw}x${w.ch}`).join('|');
   for (const c of [11, 10, 9, 8, 7, 6, 7, 8, 9, 10, 11, 12]) recolumn(page, c);
   const breiten = page.widgets.map((w) => w.cw);
@@ -298,7 +359,7 @@ test('Spalten hin und zurueck laesst den Aufbau heil', () => {
 });
 
 test('beim Spaltenwechsel waechst nie eine Kachel von selbst', () => {
-  const page = buildPreset('madmapper');
+  const page = buildPreset('mm-master');
   const vorher = new Map(page.widgets.map((w) => [w.label, w.cw]));
   for (const c of [11, 12, 11, 12, 4, 12]) {
     recolumn(page, c);

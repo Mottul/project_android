@@ -25,8 +25,10 @@ installierbar, ohne Konto und ohne Cloud.
   4 bis 24 Spalten, „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen
   (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest). Beim Wechsel
   der Spaltenzahl behalten die Kacheln ihre Groesse; von selbst waechst nichts.
-* **Mehrere Seiten** je Projekt, Vorlagen fuer MadMapper und NovaStar,
-  Export/Import als JSON, Zuruecksetzen je Seite oder fuers ganze Projekt.
+* **Mehrere Seiten** je Projekt, Export/Import als JSON, Zuruecksetzen je
+  Seite oder fuers ganze Projekt. Mitgeliefert sind drei MadMapper-Vorlagen
+  — *MM Master* (Pegel, Freeze, Tempo, Farbe), *MM Cues* (Zeitleisten-Bank 1)
+  und *MM Medien* (Medien, Ausgaenge) — sowie *NovaStar* und eine leere Seite.
 * **Feedback.** Eingehendes OSC bewegt die Regler mit — ausser man haelt gerade
   den Finger drauf.
 * **Vollbild** auf Tastendruck (Einstellungen), oder gleich ueber „Zum
@@ -40,10 +42,19 @@ installierbar, ohne Konto und ohne Cloud.
 * **NovaStar.** `/nova/brightness`, `/nova/blackout`, `/nova/freeze`,
   `/nova/preset` gehen als TCP-Befehle an den Prozessor.
 
-> Die Adressen der MadMapper-Vorlage sind **Vorschlaege**, keine festen
-> MadMapper-Adressen — zugeordnet werden sie dort per „OSC lernen". Die
-> vollstaendige Liste der festen Adressen steht in der
-> [MadMapper-Dokumentation](https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list).
+> Die MadMapper-Vorlagen benutzen die **festen Adressen** aus der
+> [offiziellen Kanalliste](https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list)
+> und funktionieren ohne „OSC lernen". Zwei Einschraenkungen: fuer einzelne
+> **Surfaces** gibt es keine festen Adressen — die holt man sich in MadMapper
+> per Rechtsklick auf den Regler → *Copy OSC address* (oder per „OSC lernen").
+> Und der Bereich des **BPM**-Faders (40–240) ist eine musikalische Annahme,
+> kein Wert aus der Liste; im Bauteil aenderbar.
+>
+> Manche MadMapper-Befehle erwarten **gar keinen Wert** (in der Liste `nil`):
+> TAP, Stopp, naechstes Medium. Solche Bauteile stehen unter
+> *Werte → Nachricht* auf „ohne Wert (Ausloeser)". Ob eine Spalte der
+> Zeitleiste als Taster (momentan) oder als Schalter laeuft, ist Geschmack —
+> umstellbar unter *Werte → Verhalten*.
 
 ## Bedienung
 

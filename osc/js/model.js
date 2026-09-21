@@ -141,7 +141,7 @@ export function makeWidget(type = 'fader', over = {}) {
     color: COLORS[0],
     address: '/mottul/' + t,
     addressY: '',
-    argType: 'f',          // 'f' = Kommazahl, 'i' = Ganzzahl
+    argType: 'f',          // 'f' Kommazahl | 'i' Ganzzahl | 'n' ohne Wert
     min: 0,
     max: 1,
     onValue: 1,
@@ -183,7 +183,7 @@ export function normalizeWidget(raw) {
   w.color = /^#[0-9a-f]{6}$/i.test(String(w.color)) ? w.color : base.color;
   w.address = String(w.address || base.address);
   w.addressY = String(w.addressY || '');
-  w.argType = w.argType === 'i' ? 'i' : 'f';
+  w.argType = ['i', 'n'].includes(w.argType) ? w.argType : 'f';
   w.min = num(w.min, 0);
   w.max = num(w.max, 1);
   if (w.min === w.max) w.max = w.min + 1;
