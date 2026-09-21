@@ -3,7 +3,7 @@
  * Bei Aenderungen an den Dateien CACHE hochzaehlen — alte Caches werden
  * beim Aktivieren geloescht.
  */
-const CACHE = 'oscpad-v1.8.0';
+const CACHE = 'oscpad-v1.9.0';
 
 const SHELL = [
   './',

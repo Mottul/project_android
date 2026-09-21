@@ -304,8 +304,14 @@ export function buildInspector(body, w, page, cbs) {
       panel.append(g);
     }
     if (w.type !== 'label' && w.type !== 'meter') {
-      panel.append(field('Zahlentyp', selectInput(w.argType, [['f', 'Kommazahl (float)'], ['i', 'Ganzzahl (int)']],
-        (v) => { w.argType = v; change(); })));
+      // „Ohne Wert" gibt es nur, wo eine Nachricht ein Befehl ist — ein Regler
+      // ohne Wert waere sinnlos.
+      const schaltet = ['toggle', 'button', 'bank', 'select'].includes(w.type);
+      panel.append(field('Nachricht', selectInput(w.argType, [
+        ['f', 'Kommazahl (float)'],
+        ['i', 'Ganzzahl (int)'],
+        ...(schaltet ? [['n', 'ohne Wert (Ausloeser)']] : []),
+      ], (v) => { w.argType = v; change(); })));
     }
     if (w.type === 'knob') {
       panel.append(checkbox('Endlos-Encoder (sendet Schritte ±1)', w.endless, (v) => { w.endless = v; rebuild(); }));

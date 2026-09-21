@@ -65,8 +65,20 @@ In MadMapper unter Einstellungen -> OSC den Eingangsport ablesen und in der App
 unter "OSC-Ziel" eintragen. Laeuft die Bruecke auf demselben Rechner wie
 MadMapper, bleibt der Host 127.0.0.1.
 
-Welche Adresse welchen Regler steuert, legt MadMapper per "OSC lernen" fest:
-Regler auswaehlen, Lernen einschalten, in der App den Fader bewegen.
+Fuer Master, Zeitleisten, Medien und Ausgaenge hat MadMapper feste Adressen;
+die Vorlagen "MM Master", "MM Cues" und "MM Medien" in der App benutzen genau
+diese und brauchen kein Lernen. Die vollstaendige Liste:
+https://docs.madmapper.com/madmapper/6/11.-live-performance-and-control/osc-commands-and-channels-list
+
+Fuer einzelne Surfaces gibt es KEINE festen Adressen. Zwei Wege: in MadMapper
+mit der rechten Maustaste auf den Regler -> "Copy OSC address" und die Adresse
+in das Bauteil einsetzen, oder per "OSC lernen" -- Regler auswaehlen, Lernen
+einschalten, in der App den Fader bewegen.
+
+Manche Befehle erwarten gar keinen Wert (in der Liste "nil"): TAP, Stopp,
+naechstes Medium. In der App steht das im Bauteil unter Werte -> Nachricht auf
+"ohne Wert (Ausloeser)"; auf dem Draht steht dann nur die Adresse und ein
+leerer Typ-String.
 
 Farbe: MadMappers RGBA-Regler erwartet eine 32-Bit-Farbe (OSC-Typ "r"), nicht
 vier einzelne Zahlen. Das ist in der App die Vorgabe; umstellen laesst es sich
