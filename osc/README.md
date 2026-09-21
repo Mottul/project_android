@@ -113,6 +113,9 @@ npm test           # Rechenkern, Raster, Poti-Geometrie, Bruecke
 npm run icons:osc  # Icons neu erzeugen
 ```
 
+Was noch offen ist, steht in [`FAHRPLAN.md`](FAHRPLAN.md) — nach Aufwand
+sortiert, mit Buendeln zum Abarbeiten.
+
 Aufbau:
 
 | Datei | Inhalt |
