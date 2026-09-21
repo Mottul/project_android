@@ -42,8 +42,8 @@ der Teil, der spaeter nicht mehr billig zu aendern ist.
 | M5 | **Gruppen-Master** *(Modell)* | Ein Fader skaliert mehrere Adressen prozentual | wie M4, gleiches Nachrichtenmodell |
 | M6 | **Mehrfachauswahl im Editor** | Mehrere Kacheln zugleich verschieben, faerben, loeschen | `editor.js`, `app.js` (Auswahl wird zur Menge) |
 | M7 | **Seitenwechsel per Wischen** | Zwischen Seiten blaettern ohne Reiter zu treffen — kollidiert mit dem Ziehen der Regler, braucht eine saubere Abgrenzung | `app.js`, `widgets.js` |
-| M9 | **Seite aus dem Monitor lernen** | Eine Weile lauschen und aus allem Gehoerten eine Seite bauen — findet die Adressen der eigenen Installation, unabhaengig von Programm und Version. Robuster als jede Vorlage | `app.js` (`logBuf`), `model.js` |
 | M8 | **Zwei Ziele gleichzeitig** | Haupt- und Reserverechner parallel versorgen | `bridge/osc-bridge.mjs`, Verbindungsblatt |
+| M9 | **Seite aus dem Monitor lernen** | Eine Weile lauschen und aus allem Gehoerten eine Seite bauen — findet die Adressen der eigenen Installation, unabhaengig von Programm und Version. Robuster als jede Vorlage | `app.js` (`logBuf`), `model.js` |
 
 ## L — Gross
 
@@ -75,7 +75,8 @@ Vier Regeln, nach denen die Buendel geschnitten sind:
 
 | Buendel | Inhalt | Warum zusammen |
 | --- | --- | --- |
-| **1 · Adressen** | S1, S2, S3 | Alle drei fassen dieselbe Stelle an: die Adressliste beim Zeichnen und das Adressfeld. Zusammen ergeben sie einen Gedanken — Adressen sehen, waehlen, einmal senden. |
+| **0 · Vorlagen** | M0 | Steht fuer sich: nur `presets.js`, aber blockiert, bis die Adressliste vorliegt. Sobald sie da ist, in einem Zug — Vorlagen schneidet man besser am Stueck als einzeln. |
+| **1 · Adressen** | S1, S2, S3 (+ M9) | Alle fassen dieselbe Stelle an: die Adressliste beim Zeichnen, das Adressfeld, das Protokoll. Zusammen ein Gedanke — Adressen sehen, waehlen, senden. **M9** passt in denselben Aufwasch und macht aus dem Buendel etwa einen Tag statt eines halben. |
 | **2 · Live-Sicherheit** | S5, S7, S9, S10 | Alles Verhalten am Finger im Live-Betrieb; ein Testlauf deckt alle vier ab. S9 und S10 bringen die ersten neuen Modellfelder mit. |
 | **3 · Kleinkram** | S4, S6, S8, S11, S12 | Streut ueber die Dateien, aber jeder Punkt ist unter einer halben Stunde — ein Sammel-Commit statt fuenf. |
 | **4 · Wertverarbeitung** | M1, M2, M3 | Alle drei sitzen zwischen „Regler bewegt sich" und „Nachricht geht raus". Gemeinsam entworfen bleibt die Stelle einfach; einzeln wird sie dreimal umgebaut. |
