@@ -1,7 +1,8 @@
 /** OSC-Codec: node --test */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeMessage, decodePacket, align4, isValidAddress, formatMessage } from '../js/osc.js';
+import { encodeMessage, decodePacket, align4, isValidAddress, formatMessage,
+  packRgba, unpackRgba, rgbaHex } from '../js/osc.js';
 
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join(' ');
 
@@ -80,4 +81,45 @@ test('Adressen werden grob geprueft', () => {
 test('formatMessage ist kurz und lesbar', () => {
   assert.equal(formatMessage('/a', [1, 0.5, 'x']), '/a 1 0.5 "x"');
   assert.equal(formatMessage('/a', []), '/a');
+});
+
+/* ------------------------------------------------- 32-Bit-Farbe (Typ r) --- */
+
+test('die 32-Bit-Farbe steht als vier Bytes R,G,B,A im Paket', () => {
+  const buf = new Uint8Array(encodeMessage('/s/1/color', [{ type: 'r', value: packRgba(1, 0.5, 0, 1) }]));
+  const tags = new TextDecoder().decode(buf.subarray(12, 16));
+  assert.equal(tags.replace(/\0+$/, ''), ',r', 'Typenliste ist ,r');
+  assert.deepEqual([...buf.subarray(16)], [0xff, 0x80, 0x00, 0xff], 'R G B A als einzelne Bytes');
+  assert.equal(buf.length % 4, 0);
+});
+
+test('packRgba rundet und begrenzt auf 0..255', () => {
+  assert.equal(packRgba(0, 0, 0, 0), 0);
+  assert.equal(packRgba(1, 1, 1, 1) >>> 0, 0xffffffff);
+  assert.equal(packRgba(2, -1, 0.5, 1) >>> 0, 0xff0080ff, 'ausserhalb 0..1 wird gekappt');
+});
+
+test('Farbe hin und zurueck', () => {
+  for (const hex of ['#000000ff', '#ff8000ff', '#123456ab', '#ffffff00']) {
+    const c = unpackRgba(hex);
+    assert.equal(rgbaHex(packRgba(c.r, c.g, c.b, c.a)), hex);
+  }
+  assert.equal(unpackRgba('#ff8000').a, 1, 'ohne Deckkraft gilt voll');
+  assert.equal(unpackRgba('unsinn'), null);
+});
+
+test('eine empfangene Farbe kommt als „#rrggbbaa" an', () => {
+  const buf = encodeMessage('/feedback/color', [{ type: 'r', value: 0x11223344 }]);
+  const [msg] = decodePacket(buf);
+  assert.equal(msg.types, 'r');
+  assert.deepEqual(msg.args, ['#11223344']);
+});
+
+test('Farbe zwischen anderen Argumenten stoert die Leseposition nicht', () => {
+  const buf = encodeMessage('/misch', [
+    { type: 'i', value: 7 }, { type: 'r', value: 0xaabbccdd }, { type: 's', value: 'ende' },
+  ]);
+  const [msg] = decodePacket(buf);
+  assert.equal(msg.types, 'irs');
+  assert.deepEqual(msg.args, [7, '#aabbccdd', 'ende']);
 });

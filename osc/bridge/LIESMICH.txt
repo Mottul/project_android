@@ -26,14 +26,23 @@ Windows:  Ordner oeffnen, in die Adressleiste des Explorers "cmd" tippen,
 macOS:    Terminal oeffnen, "cd " tippen, den Ordner ins Fenster ziehen,
           Eingabetaste, dann:      node osc-bridge.mjs
 
-Die Bruecke zeigt danach so etwas an:
+Die Bruecke zeigt danach einen QR-Code und so etwas an:
 
       Am Handy oeffnen:
-        http://192.168.1.20:8090
+        http://192.168.1.20:8090        wlan0   <- vermutlich diese
+        http://172.17.0.1:8090          docker0
 
-Diese Adresse am Handy im Browser oeffnen — die App laeuft dann direkt vom
-Rechner, ohne Internet. Alternativ die App von der Webseite benutzen und in
-"Verbindung" ws://192.168.1.20:8090 eintragen.
+Den QR-Code mit der Handy-Kamera scannen — oder die Adresse eintippen. Die App
+laeuft dann direkt vom Rechner, ohne Internet. Alternativ die App von der
+Webseite benutzen und in "Verbindung" ws://192.168.1.20:8090 eintragen.
+
+Mehrere Adressen? Richtig ist die des Netzes, in dem auch das Handy haengt —
+meist das WLAN. Adressen von Docker, VirtualBox, VPN oder Hyper-V stehen
+deshalb weiter unten. Sicher weiss es die Bruecke, sobald sich ein Handy
+meldet: dann schreibt sie
+
+      [12:01:33] Handy verbunden (1 aktiv) ueber http://192.168.1.20:8090
+                 — diese Adresse ist die richtige
 
 
 Einstellungen
@@ -46,6 +55,7 @@ sind nur die Startwerte, bis sich das erste Handy meldet.
   node osc-bridge.mjs --listen 9000            Feedback empfangen
   node osc-bridge.mjs --nova 10.0.0.9          NovaStar-Prozessor (TCP 5200)
   node osc-bridge.mjs --dir /pfad/zur/app      App-Ordner von Hand setzen
+  node osc-bridge.mjs --no-qr                  ohne QR-Code starten
   node osc-bridge.mjs --help                   Hilfe
 
 
@@ -57,6 +67,10 @@ MadMapper, bleibt der Host 127.0.0.1.
 
 Welche Adresse welchen Regler steuert, legt MadMapper per "OSC lernen" fest:
 Regler auswaehlen, Lernen einschalten, in der App den Fader bewegen.
+
+Farbe: MadMappers RGBA-Regler erwartet eine 32-Bit-Farbe (OSC-Typ "r"), nicht
+vier einzelne Zahlen. Das ist in der App die Vorgabe; umstellen laesst es sich
+im Bauteil unter Werte -> Nachricht.
 
 
 NovaStar

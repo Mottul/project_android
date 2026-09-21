@@ -51,6 +51,15 @@ export const BASE_COLORS = [
   ['Warmweiss', '#ffb46b'], ['Weiss', '#ffffff'], ['Kaltweiss', '#c8e4ff'],
 ];
 
+/**
+ * Form der Farbnachricht. Programme sind sich hier nicht einig:
+ *  - `rgba32`: ein 32-Bit-Wert (OSC-Typ r) — das erwarten MadMapper und
+ *    andere an ihren RGBA-Reglern. Vorgabe.
+ *  - `float`:  vier Kommazahlen 0..1 — die weiteste Verbreitung sonst.
+ *  - `int`:    vier Ganzzahlen 0..255.
+ */
+export const COLOR_ARGS = ['rgba32', 'float', 'int'];
+
 /** Bedienung des Farb-Bauteils: Regler in RGB, Regler in HSV, oder Palette. */
 export const COLOR_MODES = ['rgb', 'hsv', 'palette'];
 
@@ -154,6 +163,7 @@ export function makeWidget(type = 'fader', over = {}) {
     source: 'number',      // Anzeige: 'number' | 'text'
     colorMode: 'rgb',      // Farbe: 'rgb' | 'hsv' | 'palette'
     palette: [],           // Farbe: eigene Palette (leer = Grundfarben)
+    colorArg: 'rgba32',    // Farbe: Form der Nachricht (siehe COLOR_ARGS)
     ...over,
   };
   if (t === 'toggle' || t === 'button') { w.cw = over.cw ?? size.cw; w.ch = over.ch ?? size.ch; }
@@ -195,6 +205,7 @@ export function normalizeWidget(raw) {
   w.source = w.source === 'text' ? 'text' : 'number';
   const mode = COLOR_MODE_ALIAS[w.colorMode] || w.colorMode;
   w.colorMode = COLOR_MODES.includes(mode) ? mode : 'rgb';
+  w.colorArg = COLOR_ARGS.includes(w.colorArg) ? w.colorArg : 'rgba32';
   w.palette = Array.isArray(w.palette)
     ? w.palette.slice(0, 48).map((c) => (/^#[0-9a-f]{6}$/i.test(String(c)) ? String(c).toLowerCase() : '#ffffff'))
     : [];

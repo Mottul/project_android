@@ -319,6 +319,12 @@ export function buildInspector(body, w, page, cbs) {
         (v) => { w.source = v; rebuild(); })));
     }
     if (w.type === 'color') {
+      panel.append(field('Nachricht', selectInput(w.colorArg, [
+        ['rgba32', '32-Bit-Farbe (OSC-Typ r)'],
+        ['float', 'vier Kommazahlen 0–1'],
+        ['int', 'vier Ganzzahlen 0–255'],
+      ], (v) => { w.colorArg = v; change(); })));
+      panel.append(el('p', 'note', 'MadMapper und viele andere erwarten an ihren RGBA-Reglern die 32-Bit-Farbe. Was wirklich rausgeht, zeigt der Monitor.'));
       panel.append(field('Bedienung', selectInput(w.colorMode, [
         ['rgb', 'Regler R/G/B + Deckkraft'],
         ['hsv', 'Regler H/S/V + Deckkraft'],

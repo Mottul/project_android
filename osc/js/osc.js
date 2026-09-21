@@ -3,8 +3,12 @@
  *
  * Alles ist big-endian, Strings sind null-terminiert und auf ein Vielfaches
  * von 4 Byte aufgefuellt. Gesendet werden die Typen i (int32), f (float32),
- * s (string), T/F (wahr/falsch). Gelesen wird zusaetzlich d, h, S, N, I und b,
- * damit Feedback fremder Programme nicht am Decoder scheitert.
+ * s (string), T/F (wahr/falsch) und r (32-Bit-Farbe RGBA). Gelesen wird
+ * zusaetzlich d, h, S, N, I und b, damit Feedback fremder Programme nicht am
+ * Decoder scheitert.
+ *
+ * Der Typ `r` ist die Farbe, die Programme wie MadMapper an ihren
+ * RGBA-Reglern erwarten: ein 32-Bit-Wert aus vier Bytes R, G, B, A.
  *
  * Diese Datei laeuft unveraendert im Browser und in Node (Tests).
  */
@@ -53,6 +57,11 @@ export function encodeMessage(address, args = []) {
         payload += stringSize(b);
         break;
       }
+      case 'r':
+        tags += 'r';
+        parts.push({ kind: 'r', num: Number(a.value) >>> 0 });
+        payload += 4;
+        break;
       case 'T':
         tags += 'T';
         break;
@@ -80,6 +89,9 @@ export function encodeMessage(address, args = []) {
     if (part.kind === 'i') {
       view.setInt32(p, part.num, false);
       p += 4;
+    } else if (part.kind === 'r') {
+      view.setUint32(p, part.num >>> 0, false);
+      p += 4;
     } else if (part.kind === 'f') {
       view.setFloat32(p, part.num, false);
       p += 4;
@@ -89,6 +101,30 @@ export function encodeMessage(address, args = []) {
     }
   }
   return buf;
+}
+
+/* ------------------------------------------------- 32-Bit-Farbe (Typ r) --- */
+
+/** Vier Anteile 0..1 zu einem 32-Bit-Wert 0xRRGGBBAA packen. */
+export function packRgba(r, g, b, a = 1) {
+  const c = (v) => Math.max(0, Math.min(255, Math.round((Number(v) || 0) * 255)));
+  return ((c(r) << 24) | (c(g) << 16) | (c(b) << 8) | c(a)) >>> 0;
+}
+
+/** 32-Bit-Farbe als „#rrggbbaa" — so steht sie auch im Monitor. */
+export const rgbaHex = (n) => `#${((n >>> 0) >>> 0).toString(16).padStart(8, '0')}`;
+
+/** „#rrggbbaa" (oder „#rrggbb") zurueck zu Anteilen 0..1. */
+export function unpackRgba(hex) {
+  const m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(String(hex || ''));
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return {
+    r: ((n >> 16) & 255) / 255,
+    g: ((n >> 8) & 255) / 255,
+    b: (n & 255) / 255,
+    a: m[2] === undefined ? 1 : parseInt(m[2], 16) / 255,
+  };
 }
 
 /** Liest einen OSC-String ab `pos`; gibt Text und neue Position zurueck. */
@@ -150,6 +186,7 @@ function readPacket(u8, start, end, out, depth) {
         else if (t === 'F') args.push(false);
         else if (t === 'N') args.push(null);
         else if (t === 'I') args.push(Infinity);
+        else if (t === 'r') { args.push(rgbaHex(view.getUint32(p, false))); p += 4; }
         else if (t === 'b') { const len = view.getInt32(p, false); args.push(len); p = align4(p + 4 + Math.max(0, len)); }
         else break; // unbekannter Typ -> Rest ist nicht mehr deutbar
         types += t;

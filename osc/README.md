@@ -18,7 +18,9 @@ installierbar, ohne Konto und ohne Cloud.
   zu zwei Zeilen). Wird die Kachel schmaler, gehen Schriften mit, statt zu
   verschwinden. **Farbe** gibt es als R/G/B-Regler, als H/S/V-Regler
   oder als Palette zum Antippen, die man sich selbst zusammenstellt — jeweils
-  mit Deckkraft.
+  mit Deckkraft. Gesendet wird wahlweise als **32-Bit-Farbe** (OSC-Typ `r`,
+  das erwartet MadMapper an seinen RGBA-Reglern), als vier Kommazahlen oder
+  als vier Ganzzahlen.
 * **Freies Raster.** Kacheln verschieben und an der Ecke unten rechts aufziehen,
   4 bis 24 Spalten, „auf Bildschirm einpassen" fuer Bedienung ohne Scrollen
   (wirkt nur live — beim Bearbeiten bleibt die Zeilenhoehe fest). Beim Wechsel
@@ -77,12 +79,17 @@ node bridge/osc-bridge.mjs
 
 Es macht aus den WebSocket-Nachrichten des Handys echte UDP-Pakete, reicht
 Feedback zurueck und liefert nebenbei die App selbst aus — dadurch funktioniert
-alles auch ganz ohne Internet:
+alles auch ganz ohne Internet. Beim Start zeigt es einen **QR-Code** zum
+Scannen und listet die Netzwerkadressen, die wahrscheinlichste zuerst:
 
 ```
 Am Handy oeffnen:
-  http://192.168.1.20:8090
+  http://192.168.1.20:8090        wlan0  ← vermutlich diese
+  http://172.17.0.1:8090          docker0
 ```
+
+Welche stimmt, sagt die Bruecke spaetestens, sobald sich ein Handy meldet —
+dann schreibt sie die Adresse hin, ueber die es hereingekommen ist.
 
 Einzelheiten: [`bridge/LIESMICH.txt`](bridge/LIESMICH.txt).
 

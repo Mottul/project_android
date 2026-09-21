@@ -135,8 +135,13 @@
       <ol class="steps">
         <li><a id="dlBridge" href="./bridge/osc-bridge.mjs" download="osc-bridge.mjs">osc-bridge.mjs herunterladen</a> (auf den Rechner mit MadMapper).</li>
         <li>Terminal im Ordner oeffnen:<br><code>node osc-bridge.mjs</code></li>
-        <li>Die gezeigte Adresse wie <code>http://192.168.1.20:8090</code> oben eintragen — oder am Handy oeffnen.</li>
+        <li>Den <b>QR-Code</b> im Terminal mit der Handy-Kamera scannen — oder die
+          gezeigte Adresse wie <code>http://192.168.1.20:8090</code> eintippen.</li>
       </ol>
+      <p class="note"><b>Mehrere Adressen?</b> Es muss die des Netzes sein, in dem auch
+        das Handy haengt — meist das WLAN. Die Bruecke stellt die wahrscheinlichste
+        nach oben und schreibt, sobald sich ein Handy meldet, ueber welche Adresse
+        es hereingekommen ist.</p>
       <p class="note"><b>Ziel-Port</b> ist der OSC-Eingang im Zielprogramm (MadMapper:
         <i>Preferences → OSC</i>). Laeuft die Bruecke auf demselben Rechner, genuegt
         <code>127.0.0.1</code>.</p>
@@ -231,7 +236,11 @@
       einen Wert. Seitlich ausweichen macht den Griff fein. Der Wert eines
       Faders steht in der Bahn und bleibt lesbar, wenn der Balken darueber
       laeuft; ist die Kachel zu schmal dafuer, rueckt er nach oben.</p>
-    <p><b>Farbe.</b> Unter <i>Werte → Bedienung</i> waehlt man zwischen drei
+    <p><b>Farbe.</b> Unter <i>Werte → Nachricht</i> steht, in welcher Form die
+      Farbe rausgeht: als <b>32-Bit-Farbe</b> (OSC-Typ <code>r</code>) — das
+      erwarten MadMapper und andere an ihren RGBA-Reglern —, als vier
+      Kommazahlen oder als vier Ganzzahlen. Was wirklich gesendet wird, zeigt
+      der Monitor. Unter <i>Werte → Bedienung</i> waehlt man zwischen drei
       Arten: Regler in <b>R/G/B</b>, Regler in <b>H/S/V</b> (Farbton,
       Saettigung, Helligkeit) oder eine <b>Palette</b> zum Antippen. Die
       Palette stellt man sich im Reiter <i>Palette</i> selbst zusammen; die
